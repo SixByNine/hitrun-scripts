@@ -1,0 +1,30 @@
+#!/bin/bash
+
+cmdlist=$1
+nthread=$2
+
+date=`date +%s`
+
+i=0
+cat $cmdlist | while read line
+do
+	if [[ $i -ge $nthread ]] ; then
+		i=0
+	fi
+
+	touch tasklist.$i
+	echo "$line" >> tasklist.$i
+	i=`expr $i + 1`
+done
+
+for ((i=0;i<$nthread;i+=1)); do
+	echo "starting $i"
+	bash tasklist.$i &
+	procs[$i]=$!
+done
+
+for ((i=0;i<$nthread;i+=1)); do
+	wait ${procs[$i]}
+	echo "done $i"
+done
+

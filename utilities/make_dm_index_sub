@@ -1,0 +1,11 @@
+#!/bin/tcsh
+rm dm_index
+touch dm_index
+foreach i (`ls *.sub`)
+	$PH_PIPELINE_SIGPROC/bin/header $i -dm | awk '{printf($0)}' >> dm_index
+	echo " $i" >> dm_index
+end
+
+rm -f dm_index.start
+rm -f dm_index.end
+

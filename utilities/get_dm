@@ -1,0 +1,34 @@
+#!/usr/bin/python
+import sys
+
+if len(sys.argv) != 3:
+        print "Please specify 'db file name' and the dm to match"
+        sys.exit(1)
+
+
+file = sys.argv[1]
+dmtarget = eval(sys.argv[2])
+
+
+infile = open(file,"r")
+
+
+lines = infile.readlines()
+infile.close()
+
+dist = 100000000
+best = -1
+i = -1
+for line in lines:
+        i = i + 1
+        split = line.split()
+        if len(split) > 1:
+                curdist = abs(eval(split[0]) - dmtarget)
+                if curdist < dist:
+                        dist = curdist
+                        best = i
+
+
+
+print lines[best][0:-1]
+

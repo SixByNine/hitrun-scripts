@@ -1,0 +1,63 @@
+#!/bin/bash
+
+seek=$1
+nthread=$2
+outfile=$3
+options="$4"
+
+date=`date +%s`
+
+for ((i=0;i<$nthread;i+=1)); do
+	timfile[$i]=`echo -n "$date.$i" | md5sum | awk '{print $1}'`
+done
+
+
+A=''
+i=0
+\rm -f seeklist.*
+for file in `ls *.sub`; do
+	if [[ $i -ge $nthread ]] ; then
+		i=0
+	fi
+
+	subdmfile=$file.valid_dms
+	touch seeklist.$i
+	#echo "ln -s $file ${timfile[$i]}.tim" >> seeklist.$i
+	for dm in `cat $subdmfile`; do
+		echo "dedisperse $file -d $dm -nobaseline > ${timfile[$i]}.tim" >> seeklist.$i
+		echo "$seek ${timfile[$i]}.tim -q $A $options > /dev/null" >> seeklist.$i
+		echo "rm ${timfile[$i]}.tim" >> seeklist.$i
+		A='-A'
+	done
+	i=`expr $i + 1`
+
+
+done
+
+for ((i=0;i<$nthread;i+=1)); do
+	echo "starting $i"
+	bash seeklist.$i &
+	procs[$i]=$!
+done
+
+for ((i=0;i<$nthread;i+=1)); do
+	wait ${procs[$i]}
+	echo "done $i"
+done
+
+echo "Making final prd file: $outfile.prd"
+\rm -f $oufile.prd
+touch $outfile.prd
+for ((i=0;i<$nthread;i+=1)); do
+	cat ${timfile[$i]}.prd >> $outfile.prd
+done
+
+for ((i=0;i<$nthread;i+=1)); do
+	rm -f ${timfile[$i]}.tim
+	rm -f ${timfile[$i]}.prd
+	rm -f ${timfile[$i]}.top
+	rm -f ${timfile[$i]}.log
+done
+
+
+echo "done"

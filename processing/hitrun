@@ -1,0 +1,211 @@
+#!/bin/tcsh -f
+# S.Bates 7/11/2008
+# M.Keith 2008
+
+#
+# HitRun Processing script for the awesome
+# new Parkes Multibeam Survey Mk II
+#
+# Steps:
+# 1) Create rfi kill file with 'make_killfile;
+# 2) Dedisperse with 'dedisperse_all'
+# 3) Seek each one with seek/multiseek
+# 4) Find best candidates with 'ph-best'
+# 5) Fold candidates from .fil with 'dspsr'
+# 6) Optimise candidates with 'pdmp'
+
+echo "HitRun Processing script"
+echo "========================"
+echo "Software Versions"
+$HITRUN/dev/scripts/hitrun-getversions
+
+set sigproc = $HITRUN/bin
+set dedisp = $HITRUN/bin/dedisperse_all
+set pulsarhunter = $HITRUN/pulsarhunter/scripts
+set utils=$HITRUN/dev/scripts/utilities
+set nthread=$HITRUN_NTHREADS
+set dspsr=$HITRUN/bin/dspsr
+set pdmp=$HITRUN/bin/pdmp
+set psradd=$HITRUN/bin/psradd
+set zapfile=$HITRUN/zapfile
+set paz=$HITRUN/bin/paz
+set psredit=$HITRUN/bin/psredit
+set deg2hr = $HITRUN/dev/scripts/utilities/deg2hr.csh
+
+set timer="time "
+
+set maxdm=1000
+set minwidth=0.000064
+
+if ( $# < 1 ) then
+	echo "$0 [sigproc .fil file]"
+	exit 1
+endif
+
+if ( $# > 1 ) then
+	set conffile=$2
+	source $conffile
+endif
+
+set inputfile = $1
+
+set shortfile = `echo ${inputfile} | sed -e 's:\....::'`
+set psrxml = ${shortfile}.psrxml
+
+# Work out which 2^n to use...
+set nsamp=`$sigproc/header $inputfile -nsamples`
+set i=$nsamp
+set pow2=0
+while ( $i > 1 )
+set pow2=`echo $pow2 | awk '{print $0 + 1}'`
+set i=`echo $i | awk '{print int($i/2)}'`
+end
+
+set tlength=$pow2
+echo "[HITRUN] Using 2^$pow2 point transform"
+
+# Get the beam number from the header file. Bit of a dodgy awk though...
+set beam = `grep receiver_beam $psrxml | awk '{print substr($1,16,2)}'`
+
+
+
+echo "[HITRUN] Creating 'killfile' to remove bad channels "`date`
+set cmd="$utils/make_killfile $inputfile"
+set cmd="$timer$cmd"
+echo $cmd
+$cmd # execute the command
+set ex=$?
+if ( $ex != 0 ) then
+	echo "[HITRUN] ERROR: killfile creation failed"
+	echo "Failed command was:"
+	echo $cmd
+	exit $ex
+endif
+
+echo "[HITRUN] Dedispersing up to DM=$maxdm cm^-3.pc "`date`
+set cmd="$dedisp $inputfile -d 0 $maxdm -g 1000000 -k $inputfile.killfile"
+set cmd="$timer$cmd"
+echo $cmd
+$cmd
+set ex=$?
+if ( $ex != 0 ) then
+	echo "[HITRUN] ERROR: dedispersion failed"
+	echo "Failed command was:"
+	echo $cmd
+	exit $ex
+endif
+
+# This is not required because we are using dspsr to fold all at once.
+#set cmd="$utils/make_dm_index_sub"
+#echo $cmd
+#$cmd
+
+cp $zapfile ./zapfile
+echo "[HITRUN] Seeking using $nthread threads, with options '-head -recon -fftw' "`date`
+set cmd="$utils/multiseek $sigproc/seek $nthread $inputfile $tlength '-head -recon -fftw -p5 -zzapfile '"
+set cmd="$timer$cmd"
+echo "$timer$cmd"
+$timer$utils/multiseek $sigproc/seek $nthread $inputfile $tlength '-head -recon -fftw -p5 -zzapfile'
+set ex=$?
+if ( $ex != 0 ) then
+	echo "[HITRUN] ERROR: multi-threaded seek failed"
+	echo "Failed command was:"
+	echo $cmd
+	exit $ex
+endif
+
+echo "[HITRUN] Removing time-series (saving zero-dm)"`date`
+mv ${filename}.0000.00.tim ${filename}.${beam}.0000.00.tim
+rm -f ${filename}.????.??.tim >& /dev/null
+
+
+echo "[HITRUN] Generating candidates with ph-best "`date`
+set cmd="$pulsarhunter/ph-best $inputfile.prd $inputfile"
+set cmd="$timer$cmd"
+echo $cmd
+$cmd
+set ex=$?
+if ( $ex != 0 ) then
+	echo "[HITRUN] ERROR: ph-best failed"
+	echo "Failed command was:"
+	echo $cmd
+	exit $ex
+endif
+
+# @TODO: Here we should write out the DM-curves to '.sum' files for backwards compatability.
+
+
+test:
+rm -f tasklist >& /dev/null
+touch tasklist
+echo "[HITRUN] Using dspsr to fold candidates "`date`
+#setting dspsr variables
+echo "F 16" >> fscrunch16
+rm grand.dat >&/dev/null
+
+set subint_length = `$sigproc/header $inputfile -tobs | awk '{print $1/64.0}'`
+foreach cand (`ls *.phcx.gz`)
+	set dm = `grep $cand $inputfile.lis | awk '{print $4}'`
+	set period = `grep $cand $inputfile.lis | awk '{print $3/1000.0}'`
+	set candshort = `echo $cand | sed -e 's:.gz$::'`
+	touch ${filename}_${name}.dat
+        echo "working on ${candshort}.dat"
+        echo "SOURCE: ${candshort}" >>! ${candshort}.dat
+        echo "PERIOD: ${period}" >>! ${candshort}.dat
+        echo "DM: ${dm}" >>! ${candshort}.dat
+	echo "-P ${candshort}.dat " >>! grand.dat
+end
+
+set cmd="${dspsr} -J fscrunch16 -U1 -t8 -b 128 -L${dspsrL} `cat grand.dat` zap chan `cat ${filename}.dspsrzap` ${filename}"
+echo $cmd
+$cmd
+set ex=$?
+switch( 
+if ( $ex != 0 ) then
+        echo "[HITRUN] ERROR: dspsr failed"
+        echo "Failed command was:"
+        echo $cmd
+        exit $ex
+endif
+
+
+
+
+
+        echo "suspect beam gl gb MJD period p_err dm dm_err width width/period fold pdmpsnr bestsnr time_scint freq_scint time_freq_scint" > ${filename}.summary
+
+foreach cand (`ls *.phcx.gz`)
+        set candshort = `echo $cand | sed -e 's:.gz$::'`
+	set archive_name = `echo $cand | sed -e 's:.phcx.gz::'`
+
+	set subdir = $candshort 
+
+	echo "${psradd} -o $archive_name.ar $subdir/*.ar && $utilities/fix_ar_header $psrxml $archive_name.ar && $pdmp  -g /null -input-phcx $cand -output-phcx $candshort $archive_name.ar" >> tasklist
+end
+$multitask tasklist $nthread
+foreach cand (`ls *.phcx`)
+	rm $cand.gz
+	gzip $cand
+
+	# make summary file
+
+end
+
+ph-dir2candlist . -beamid $inputfile
+
+echo "[HITRUN] DONE "`date`
+
+
+# old pulsarchunter method...
+#echo "[HITRUN] Using old pulsarChunter method of making candidates"
+#foreach timfile (`ls *.tim`)
+#	$sigproc/makePsrXml $timfile > $timfile.xml
+#end
+#
+#$pulsarhunter/ph-best $inputfile.prd $inputfile -userecon
+#
+#foreach cand (`ls *.phcx.gz`)
+#	set dm = `grep $cand $inputfile.lis | awk '{printf "%08.3f\n",$4}' | awk '{if (substr($1,8,1) >= 5) {printf "%07.2f\n",substr($1,0,7)+0.01} else {print substr($1,0,7)}}'`
+#	set candshort = `echo $cand | sed 's:.gz$::'`
+#	$chunter/pch-tune  $inputfile.$dm*.xml --input-phcx $cand --output-phcx $candshort
+#end

@@ -1,0 +1,71 @@
+#!/bin/bash
+
+#
+# Same as multiseek, but saves all the .prd files
+#
+
+seek=$1
+nthread=$2
+outfile=$3
+filfile=$4
+tlength=$5
+
+date=`date +%s`
+
+#for ((i=0;i<$nthread;i+=1)); do
+#	timfile[$i]=`echo -n "$date.$i" | md5sum | awk '{print $1}'`
+#done
+
+
+A=''
+i=0
+rm seeklist.*
+for file in `ls $filfile*.tim`; do
+	if [[ $i -ge $nthread ]] ; then
+		i=0
+	fi
+
+	touch seeklist.$i
+	prdfile=`echo $file | sed -e 's:\.tim$:.prd:'`
+	echo "BAD" > $prdfile
+	echo "$seek $file -q -fftw -t$tlength > /dev/null" >> seeklist.$i
+	i=`expr $i + 1`
+
+
+done
+
+for ((i=0;i<$nthread;i+=1)); do
+	echo "starting $i"
+	bash seeklist.$i &
+	procs[$i]=$!
+done
+
+for ((i=0;i<$nthread;i+=1)); do
+	wait ${procs[$i]}
+	echo "done $i"
+done
+
+rm $outfile.prd
+echo "Making final prd file: $outfile.prd"
+touch $outfile.prd
+
+#for ((i=0;i<$nthread;i+=1)); do
+#	cat ${timfile[$i]}.prd >> $outfile.prd
+#done
+
+cat $filfile*.prd >> tmp
+cat tmp >> $outfile.prd
+rm tmp
+#rm *.top
+#rm *.log
+
+
+#for ((i=0;i<$nthread;i+=1)); do
+#	rm ${timfile[$i]}.tim
+#	rm ${timfile[$i]}.prd
+#	rm ${timfile[$i]}.top
+#	rm ${timfile[$i]}.log
+#done
+
+
+echo "done"

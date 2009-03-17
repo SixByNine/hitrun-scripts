@@ -1,0 +1,17 @@
+#!/bin/csh
+
+#
+# Changes the archive file to have the right position in the header
+#
+
+set psrxml = $1
+set arname = $2
+
+set deg2hr = /nfs/cluster/psr/hitrun/dev/scripts/utilities/deg2hr.csh
+set psredit = $HITRUN/bin/psredit
+
+set ra_deg = `cat ${psrxml} | grep "<ra units='degrees'>" | head -n 1 | awk '{print substr($2,17,10)}'`
+set dec_deg = `cat ${psrxml} | grep "<dec units='degrees'>" | head -n 1 | awk '{print substr($2,17,10)}'`
+set coord = `${deg2hr} ${ra_deg} ${dec_deg}` 
+
+${psredit} -c coord=${coord} -m ${arname}
