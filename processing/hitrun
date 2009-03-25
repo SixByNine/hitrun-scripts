@@ -17,12 +17,12 @@
 echo "HitRun Processing script"
 echo "========================"
 echo "Software Versions"
-$HITRUN/dev/scripts/hitrun-getversions
+$HITRUN/scripts/hitrun-getversions
 
 set sigproc = $HITRUN/bin
 set dedisp = $HITRUN/bin/dedisperse_all
 set pulsarhunter = $HITRUN/pulsarhunter/scripts
-set utils=$HITRUN/dev/scripts/utilities
+set utils=$HITRUN/scripts/utilities
 set nthread=$HITRUN_NTHREADS
 set dspsr=$HITRUN/bin/dspsr
 set pdmp=$HITRUN/bin/pdmp
@@ -30,7 +30,7 @@ set psradd=$HITRUN/bin/psradd
 set zapfile=$HITRUN/zapfile
 set paz=$HITRUN/bin/paz
 set psredit=$HITRUN/bin/psredit
-set deg2hr = $HITRUN/dev/scripts/utilities/deg2hr.csh
+set deg2hr = $HITRUN/scripts/utilities/deg2hr.csh
 
 set timer="time "
 
