@@ -6,6 +6,7 @@ nthread=$2
 date=`date +%s`
 
 i=0
+rm -f tasklist.*
 cat $cmdlist | while read line
 do
 	if [[ $i -ge $nthread ]] ; then
