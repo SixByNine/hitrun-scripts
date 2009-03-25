@@ -20,6 +20,10 @@ endif
 
 set filename = $1
 
+if ( $# > 1 ) then
+	set alwayskill=$2
+endif
+
 if ( -e $filename == 0 ) then
 	echo "selected file '$filename' does not exist"
 endif
@@ -33,7 +37,7 @@ set thresh=15 # inital threashold for birdie zapping
 set nsum=16
 
 # Work out which 2^n to use...
-set nsamp=`$header $filename -nsamples | awk -v nsum=$nsum '{print $1/nsum}'`
+set nsamp=`$header $filename -nsamples | awk -v nsum=$nsum '{printf "%d",$1/nsum}'`
 echo $nsamp
 set i=$nsamp
 set pow2=0
@@ -52,21 +56,34 @@ rm -f ${filename}"*.prd" >&/dev/null
 echo "Making single channel time-series"
 set cmd="${dedisperse_all} ${filename} -b $nsum -g 160000"
 echo $cmd
-#$cmd
+$cmd
 
 echo "(multi)Seeking to find birdies"
 echo ${multiseek_mod} ${seek} $nthread debird ${filename} ${tlength}
 ${multiseek_mod} ${seek} $nthread debird ${filename} ${tlength}
+
+set nalways = `wc -w $alwayskill`
+echo "Killing $nalways channels by default"
+foreach channel (`cat $alwayskill`)
+	set prdname=`echo $filename $channel | awk '{printf("%s.%04d.prd",$1,$2)}'`
+	rm -f $prdname
+	echo ALWAYS > $prdname
+end
 
 echo "Making kill lists"
 rm -f ${filename}.tmp >&/dev/null
 touch ${filename}.tmp
 foreach prd (`ls -1 ${filename}*.prd`)
     grep -q BAD $prd
-    set ex=$?
-    if ( $ex == 0 ) then
+    set seekfail=$?
+    grep -q ALWAYS $prd
+    set always=$?
+
+    if ( $seekfail == 0 ) then
 	    echo "A seek failed to run"
 	    echo "100000" >>! ${filename}.tmp
+    else if ( $always == 0 ) then
+            echo "200000" >>! ${filename}.tmp
     else
             cat ${prd} | head -n 2 | tail -n 1  >>! ${filename}.tmp
     endif
@@ -99,9 +116,9 @@ echo "Zapped $nz channels of $nch"
 
 
 
-#rm -f ${filename}*.tim 
-#rm -f ${filename}*.prd
-#rm -f seeklist.*
+rm -f ${filename}*.tim 
+rm -f ${filename}*.prd
+rm -f seeklist.*
 rm -f ${filename}*.top
 rm -f ${filename}*.log
 

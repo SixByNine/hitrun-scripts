@@ -15,15 +15,16 @@ date=`date +%s`
 
 A=''
 i=0
-rm seeklist.*
+rm -f seeklist.*
 for file in `ls $filfile*.tim`; do
 	if [[ $i -ge $nthread ]] ; then
 		i=0
 	fi
 
+	rm -f $file.prd
 	touch seeklist.$i
 	#echo "$seek $file -q -fftw -t$tlength > /dev/null" >> seeklist.$i
-	echo "$seek $file -t$tlength $options > /dev/null" >> seeklist.$i
+	echo "$seek $file -t$tlength $options $A> /dev/null" >> seeklist.$i
 	A='-A'
 	i=`expr $i + 1`
 
