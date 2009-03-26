@@ -29,7 +29,7 @@ if ( -e $filename == 0 ) then
 endif
 
 set dedisperse_all = $HITRUN/bin/dedisperse_all
-set multiseek_mod = $HITRUN/dev/scripts/utilities/multiseek_killfile
+set multiseek_mod = $HITRUN/scripts/utilities/multiseek_killfile
 set seek = $HITRUN/bin/seek
 set header = $HITRUN/bin/header
 set nthread = $HITRUN_NTHREADS
