@@ -167,7 +167,7 @@ foreach cand (`ls *.phcx.gz`)
 	echo "-P ${archive_name}.dat " >>! grand.dat
 end
 
-echo zap chan `cat ${inputfile}.dspsrzap >! postproc
+echo zap chan `cat ${inputfile}.dspsrzap` >! postproc
 echo "F 16" >> postproc
 
 set cmd="${dspsr} -J postproc -U1 -t$nthread -b 128 -L${subint_length} `cat grand.dat` ${inputfile}"
