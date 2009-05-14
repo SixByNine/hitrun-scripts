@@ -1,0 +1,126 @@
+#!/bin/tcsh
+#
+# killfile.csh: Searches for birdies and eliminates those channels
+#               by running dedisperse_all in debird mode, seeking all
+#               the .tim files and noting which channels have top snr>15
+#               Outputs a killfile that can be used for dedispersing
+# 
+# Lina Levin 2008-11-10
+if ( -e $HITRUN/config ) then
+	source $HITRUN/config
+endif
+if ( ! ${?HITRUN_NTHREADS} ) then
+	setenv HITRUN_NTHREADS 4
+endif
+
+if ( $# < 1 ) then
+	echo "takes a fil file name"
+	exit 1
+endif
+
+set filename = $1
+
+if ( $# > 1 ) then
+	set alwayskill=$2
+endif
+
+if ( -e $filename == 0 ) then
+	echo "selected file '$filename' does not exist"
+endif
+
+set dedisperse_all = $HITRUN/bin/dedisperse_all
+set multiseek_mod = $HITRUN/scripts/utilities/multipchseek_killfile
+set seek = $HITRUN/bin/seek
+set header = $HITRUN/bin/header
+set nthread = $HITRUN_NTHREADS
+set thresh=15 # inital threashold for birdie zapping
+set nsum=16
+
+# Work out which 2^n to use...
+set nsamp=`$header $filename -nsamples | awk -v nsum=$nsum '{printf "%d",$1/nsum}'`
+echo $nsamp
+set i=$nsamp
+set pow2=0
+while ( $i > 1 )
+set pow2=`echo $pow2 | awk '{print $0 + 1}'`
+set i=`echo $i | awk '{print int($i/2)}'`
+end
+
+set tlength=$pow2
+echo "Using 2^$pow2 point transform"
+
+
+rm -f debird.prd >&/dev/null
+rm -f ${filename}"*.prd" >&/dev/null
+
+echo "Making single channel time-series"
+set cmd="${dedisperse_all} ${filename} -b $nsum -g 160000"
+echo $cmd
+$cmd
+
+echo "(multi)Seeking to find birdies"
+echo ${multiseek_mod} ${seek} $nthread debird ${filename} ${tlength}
+${multiseek_mod} ${seek} $nthread debird ${filename} ${tlength}
+
+set nalways = `wc -w $alwayskill`
+echo "Killing $nalways channels by default"
+foreach channel (`cat $alwayskill`)
+	set prdname=`echo $filename $channel | awk '{printf("%s.%04d.prd",$1,$2)}'`
+	rm -f $prdname
+	echo ALWAYS > $prdname
+end
+
+echo "Making kill lists"
+rm -f ${filename}.tmp >&/dev/null
+touch ${filename}.tmp
+foreach prd (`ls -1 ${filename}*.prd`)
+    grep -q BAD $prd
+    set seekfail=$?
+    grep -q ALWAYS $prd
+    set always=$?
+
+    if ( $seekfail == 0 ) then
+	    echo "A seek failed to run"
+	    echo "100000" >>! ${filename}.tmp
+    else if ( $always == 0 ) then
+            echo "200000" >>! ${filename}.tmp
+    else
+            cat ${prd} | head -n 2 | tail -n 1  >>! ${filename}.tmp
+    endif
+end
+
+rm -f ${filename}.top
+touch ${filename}.top
+cat ${filename}.tmp | awk '{print ++k, $0}' >>! ${filename}.top
+cp ${filename}.top ${filename}.topdebird
+rm -f ${filename}.tmp
+
+rebird:
+rm -f ${filename}.killfile
+touch ${filename}.killfile
+rm -f ${filename}.dspsrzap
+touch ${filename}.dspsrzap
+cat ${filename}.top | awk -v thresh=$thresh '{if ($2>thresh) print "0"; else print "1"}' >>! ${filename}.killfile
+cat ${filename}.top | awk -v thresh=$thresh '{if ($2>thresh)  print $1}' >>! ${filename}.dspsrzap
+set nch=`wc -l ${filename}.killfile | awk '{print $1}'`
+set nz=`grep 0 ${filename}.killfile | wc -l | awk '{print $1}'`
+set loop=`echo "$nz $nch" | awk '{if (($1/$2) > 0.5) print "0"; else print "1"}'`
+echo "$nch $nz $loop"
+if ( $loop == 0 ) then
+	set thresh=`echo $thresh | awk '{print $1 * 1.41}'`
+	echo "More than 50% of chans zapped, could be a bad file or strong psr..."
+	echo "Re-setting threshold to $thresh and trying again"
+	goto rebird
+endif
+echo "Zapped $nz channels of $nch"
+
+
+
+rm -f ${filename}*.tim 
+rm -f ${filename}*.prd
+rm -f seeklist.*
+rm -f ${filename}*.top
+rm -f ${filename}*.log
+
+echo "Done making kill lists"
+

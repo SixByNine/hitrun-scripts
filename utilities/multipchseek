@@ -1,0 +1,55 @@
+#!/bin/bash
+
+#
+# multiseek_mod: Same as multiseek, but saves all the .prd files
+#
+
+seek=$1
+nthread=$2
+outfile=$3
+filfile=$4
+tlength=$5
+options="$6"
+
+date=`date +%s`
+
+A=''
+i=0
+rm -f seeklist.*
+for file in `ls $filfile*.tim`; do
+	if [[ $i -ge $nthread ]] ; then
+		i=0
+	fi
+
+	xmlfile=`echo $file | sed -e 's:\.tim^:.xml:'`
+	makePsrXml $file > $xmlfile
+
+	rm -f $file.prd
+	touch seeklist.$i
+	#echo "$seek $file -q -fftw -t$tlength > /dev/null" >> seeklist.$i
+	echo "$seek $xmlfile $options -t $tlength --write-prd ${filfile}_$i.prd $A> /dev/null" >> seeklist.$i
+	A='-A'
+	i=`expr $i + 1`
+
+done
+
+for ((i=0;i<$nthread;i+=1)); do
+	echo "starting $i"
+	bash seeklist.$i &
+	procs[$i]=$!
+done
+
+for ((i=0;i<$nthread;i+=1)); do
+	wait ${procs[$i]}
+	echo "done $i"
+done
+
+rm $outfile.prd
+echo "Making final prd file: $outfile.prd"
+touch $outfile.prd
+
+cat $filfile*.prd >> tmp
+cat tmp >> $outfile.prd
+rm tmp
+
+echo "done"

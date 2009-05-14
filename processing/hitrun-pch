@@ -9,7 +9,7 @@
 # Steps:
 # 1) Create rfi kill file with 'make_killfile;
 # 2) Dedisperse with 'dedisperse_all'
-# 3) Seek each one with seek/multiseek
+# 3) Seek each one with pch-seek/multiseek
 # 4) Find best candidates with 'ph-best'
 # 5) Fold candidates from .fil with 'dspsr'
 # 6) Optimise candidates with 'pdmp'
@@ -26,6 +26,7 @@ setenv PULSARHUNTER_HOME $HITRUN/pulsarhunter
 set sigproc = $HITRUN/bin
 set dedisp = $HITRUN/bin/dedisperse_all
 set pulsarhunter = $HITRUN/pulsarhunter/scripts
+set pulsarchunter = $HITRUN/bin
 set utils=$HITRUN/scripts/utilities
 set nthread=$HITRUN_NTHREADS
 set dspsr=$HITRUN/bin/dspsr
@@ -76,7 +77,7 @@ set beam = `grep receiver_beam $psrxml | awk '{print substr($1,16,2)}'`
 # Add a goto line here if you want to jump to a partuclar part of the script!
 
 echo "[HITRUN] Creating 'killfile' to remove bad channels "`date`
-set cmd="$utils/make_killfile $inputfile $chankill"
+set cmd="$utils/make_killfile-pch $inputfile $chankill"
 set cmd="$timer$cmd"
 echo $cmd
 $cmd # execute the command
@@ -111,13 +112,13 @@ endif
 seek:
 cp $zapfile ./zapfile
 echo "[HITRUN] Seeking using $nthread threads, with options '-head -recon -fftw' "`date`
-set cmd="$utils/multiseek $sigproc/seek $nthread $inputfile $inputfile $tlength '-head -recon -fftw -p5 -zzapfile '"
+set cmd="$utils/multiseekpch $pulsarchunter/pch-seek $nthread $inputfile $inputfile $tlength '--twiddle-amps --normalise-agl'"
 set cmd="$timer$cmd"
 echo "$timer$cmd"
-$timer$utils/multiseek $sigproc/seek $nthread $inputfile $inputfile $tlength '-head -recon -fftw -p5 -zzapfile'
+$utils/multiseekpch $pulsarchunter/pch-seek $nthread $inputfile $inputfile $tlength '--twiddle-amps --normalise-agl'
 set ex=$?
 if ( $ex != 0 ) then
-	echo "[HITRUN] ERROR: multi-threaded seek failed"
+	echo "[HITRUN] ERROR: multi-threaded pch-seek failed"
 	echo "Failed command was:"
 	echo $cmd
 	exit $ex
