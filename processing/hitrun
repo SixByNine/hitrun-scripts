@@ -19,15 +19,22 @@ echo "========================"
 echo "Software Versions"
 $HITRUN/scripts/hitrun-getversions
 
-source $HITRUN/config/hitrun_settings
+set conffile = $HITRUN/config/hitrun_settings
 
 setenv PULSARHUNTER_HOME $HITRUN/pulsarhunter
+# Set some defaults
+# NOTE: These will get OVERWRITTEN by the config file later on!
+setenv HITRUN_NTHREADS 1
+setenv HITRUN_FFT_MODE "SIGPROC"
+setenv HITRUN_KILLFILE_MODE "FIXED"
+
 
 set sigproc = $HITRUN/bin
+set presto = $HITRUN/bin
+set pulsarchunter = $HITRUN/bin
 set dedisp = $HITRUN/bin/dedisperse_all
 set pulsarhunter = $HITRUN/pulsarhunter/scripts
 set utils=$HITRUN/scripts/utilities
-set nthread=$HITRUN_NTHREADS
 set dspsr=$HITRUN/bin/dspsr
 set pdmp=$HITRUN/bin/pdmp
 set psradd=$HITRUN/bin/psradd
@@ -40,7 +47,12 @@ set deg2hr = $HITRUN/scripts/utilities/deg2hr.csh
 set timer="time "
 
 set maxdm=1000
+set mindm=0
 set minwidth=0.000064
+set zmax=100
+set jump=start
+set ddgulp=1000000
+
 
 if ( $# < 1 ) then
 	echo "$0 [sigproc .fil file]"
@@ -49,10 +61,35 @@ endif
 
 if ( $# > 1 ) then
 	set conffile=$2
-	source $conffile
 endif
 
+
+source $conffile
+
+if ( $# > 2 ) then
+	set jump=$3
+endif
+
+
 set inputfile = $1
+
+set nthread=$HITRUN_NTHREADS
+
+echo "HITRUN Processing $inputfile ("`du -h $inputfile`")"
+echo "==================================================="
+echo "Config options:"
+echo "HITRUN               = $HITRUN"
+echo "HITRUN_NTHREADS      = $nthread"
+echo "HITRUN_KILLFILE_MODE = $HITRUN_KILLFILE_MODE"
+echo "HITRUN_FFT_MODE      = $HITRUN_FFT_MODE"
+echo "dm range             = $mindm -> $maxdm"
+echo "chankill             = $chankill"
+echo "zapfile              = $zapfile"
+echo ""
+echo "Starting at          : $jump"
+
+
+
 
 set shortfile = `echo ${inputfile} | sed -e 's:\....::'`
 set psrxml = ${shortfile}.psrxml
@@ -74,24 +111,43 @@ set beam = `grep receiver_beam $psrxml | awk '{print substr($1,16,2)}'`
 
 
 # Add a goto line here if you want to jump to a partuclar part of the script!
+goto $jump
+start:
 
-echo "[HITRUN] Creating 'killfile' to remove bad channels "`date`
-set cmd="$utils/make_killfile $inputfile $chankill"
-set cmd="$timer$cmd"
-echo $cmd
-$cmd # execute the command
-set ex=$?
-if ( $ex != 0 ) then
-	echo "[HITRUN] ERROR: killfile creation failed"
-	echo "Failed command was:"
-	echo $cmd
-	exit $ex
+if ( "$HITRUN_KILLFILE_MODE" == "FIXED" ) then
+	set nchan = `$sigproc/header $inputfile -nchans`
+	\rm -f $inputfile.killfile
+	echo "for i in `seq $nchan` ; do  echo 1 ; done" | bash > $inputfile.killfile
+	foreach ch (`cat $chankill`)
+		set ch1=`echo $ch | awk '{print $1+1}'`
+		sed -ie "${ch1}s:1:0:" $inputfile.killfile
+	end
+	cp $chankill ${inputfile}.dspsrzap
+	goto dedisperse
 endif
 
+if ( "$HITRUN_KILLFILE_MODE" == "SWIN" ) then
+
+	echo "[HITRUN] Creating 'killfile' to remove bad channels "`date`
+	set cmd="$utils/make_killfile $inputfile $chankill"
+	set cmd="$timer$cmd"
+	echo $cmd
+	$cmd # execute the command
+	set ex=$?
+	if ( $ex != 0 ) then
+		echo "[HITRUN] ERROR: killfile creation failed"
+		echo "Failed command was:"
+		echo $cmd
+		exit $ex
+	endif
+	goto dedisperse
+endif
+
+dedisperse:
 rm -f ${inputfile}*.tim
 
 echo "[HITRUN] Dedispersing up to DM=$maxdm cm^-3.pc "`date`
-set cmd="$dedisp $inputfile -d 0 $maxdm -g 1000000 -k $inputfile.killfile"
+set cmd="$dedisp $inputfile -d $mindm $maxdm -g $ddgulp -k $inputfile.killfile"
 set cmd="$timer$cmd"
 echo $cmd
 $cmd
@@ -108,6 +164,10 @@ endif
 #echo $cmd
 #$cmd
 
+if ( "$HITRUN_FFT_MODE" == "PRESTO" ) then
+	goto presto
+endif
+
 seek:
 cp $zapfile ./zapfile
 echo "[HITRUN] Seeking using $nthread threads, with options '-head -recon -fftw' "`date`
@@ -122,15 +182,49 @@ if ( $ex != 0 ) then
 	echo $cmd
 	exit $ex
 endif
+set prdfile = $inputfile.prd
+set cand_ext=""
+set snr_lim=6
+goto best
 
-echo "[HITRUN] Removing time-series (saving zero-dm)"`date`
-mv ${inputfile}.0000.00.tim ${inputfile}.${beam}.0000.00.tim
-rm -f ${inputfile}.????.??.tim >& /dev/null
+presto:
+cp $zapfile ./zapfile
+rm -f tasklist
+touch tasklist
+
+foreach timfile (`ls $inputfile.*.tim`)
+	echo -n "$sigproc/makePsrXml $timfile > $timfile.xml" >> tasklist
+	echo -n " && $pulsarchunter/pch-seek $timfile.xml --write-presto-fft $timfile -t $tlength" >> tasklist
+	echo -n " && $presto/rednoise $timfile.fft && \mv -f ${timfile}_red.fft $timfile.fft" >> tasklist
+	echo -n " && $presto/accelsearch -zmax $zmax -fhi 1500 -flo 1.0 -numharm 16  $timfile.fft" >> tasklist
+	echo " && /bin/rm -f $timfile.fft $timfile.inf $timfile.xml ${timfile}_ACCEL_*.*" >> tasklist
+end
+
+echo "[HITRUN] Searching using $nthread threads, with pch-seek and accelsearch "`date`
+set cmd="$utils/multitask tasklist $nthread"
+set cmd="$timer$cmd"
+echo $cmd
+$cmd
+set ex=$?
+if ( $ex != 0 ) then
+	echo "[HITRUN] ERROR: multi-threaded pch-seek/accelsearch failed"
+	echo "Failed command was:"
+	echo $cmd
+	exit $ex
+endif
+
+ls ${inputfile}*_ACCEL_* >! ${inputfile}.accelsearch
+set prdfile = ${inputfile}.accelsearch
+set cand_ext="_presto"
+set snr_lim=4
+
+# go back to the main trunk
+goto best
 
 
 best:
 echo "[HITRUN] Generating candidates with ph-best "`date`
-set cmd="$pulsarhunter/ph-best $inputfile.prd $inputfile"
+set cmd="$pulsarhunter/ph-best $prdfile $inputfile$cand_ext -minsnr $snr_lim"
 set cmd="$timer$cmd"
 echo $cmd
 $cmd
@@ -153,16 +247,18 @@ echo "[HITRUN] Using dspsr to fold candidates "`date`
 rm grand.dat >&/dev/null
 
 set subint_length = `$sigproc/header $inputfile -tobs | awk '{print $1/32.0}'`
-foreach cand (`ls *.phcx.gz`)
-	set dm = `grep $cand $inputfile.lis | awk '{print $4}'`
-	set period = `grep $cand $inputfile.lis | awk '{print $3/1000.0}'`
+foreach cand (`ls ${inputfile}${cand_ext}*.phcx.gz`)
+	set dm = `grep $cand $inputfile$cand_ext.lis | awk '{print $4}'`
+	set period = `grep $cand $inputfile$cand_ext.lis | awk '{print $3/1000.0}'`
+	set accn = `grep $cand $inputfile$cand_ext.lis | awk '{print $5}'`
 	set candshort = `echo $cand | sed -e 's:.gz$::'`
         set archive_name = `echo $cand | sed -e 's:.phcx.gz::'`
 
 	touch ${archive_name}.dat
 #        echo "working on ${archive_name}.dat"
         echo "SOURCE: ${archive_name}_ars" >>! ${archive_name}.dat
-        echo "PERIOD: ${period}" >>! ${archive_name}.dat
+	echo "PERIOD: ${period}" >>! ${archive_name}.dat
+	echo "ACC: ${accn}" >>! ${archive_name}.dat
         echo "DM: ${dm}" >>! ${archive_name}.dat
 	echo "-P ${archive_name}.dat " >>! grand.dat
 end
@@ -190,7 +286,7 @@ rm -f tasklist
 rm -f pdmp.per
 rm -f pdmp.posn
 touch tasklist
-foreach cand (`ls *.phcx.gz`)
+foreach cand (`ls ${inputfile}${cand_ext}*.phcx.gz`)
         set candshort = `echo $cand | sed -e 's:.gz$::'`
 	set archive_name = `echo $cand | sed -e 's:.phcx.gz::'`
 
@@ -201,9 +297,9 @@ end
 $utils/multitask tasklist $nthread
 
 
-rm -f  ${inputfile}.summary
+rm -f  ${inputfile}${cand_ext}.summary
 echo "suspect beam gl gb MJD period p_err dm dm_err width width/period fold pdmpsnr bestsnr time_scint freq_scint time_freq_scint" > ${inputfile}.summary
-foreach cand (`ls *.phcx`)
+foreach cand (`ls ${inputfile}${cand_ext}*.phcx`)
 	rm $cand.gz
 	gzip $cand
         set archive_name = `echo $cand | sed -e 's:.phcx::'`
@@ -228,13 +324,23 @@ foreach cand (`ls *.phcx`)
 	set fscint = $cline[10]
 	set tfscint = $cline[11]
 
-	set fold= `cat ${inputfile}.lis | grep $cand | awk '{print $8}'`
-	set bestsnr= `cat ${inputfile}.lis | grep $cand | awk '{print $2}'`
+	set fold = `cat ${inputfile}.lis | grep $cand | awk '{print $8}'`
+	set bestsnr = `cat ${inputfile}.lis | grep $cand | awk '{print $2}'`
 
-	echo "${suspect_short} ${beam} ${gl} ${gb} ${MJD} ${p} ${p_err} ${DM} ${DM_err} ${width} ${widthratio} ${fold} ${snr} ${bestsnr} ${tscint} ${fscint} ${tfscint}" >>! ${inputfile}.summary
+	echo "${suspect_short} ${beam} ${gl} ${gb} ${MJD} ${p} ${p_err} ${DM} ${DM_err} ${width} ${widthratio} ${fold} ${snr} ${bestsnr} ${tscint} ${fscint} ${tfscint}" >>! ${inputfile}${cand_ext}.summary
 
 
 end
+
+if ( "$HITRUN_FFT_MODE" == "SIGPROC&PRESTO" ) then
+	setenv HITRUN_FFT_MODE "PRESTO"
+	goto presto
+endif
+
+echo "[HITRUN] Removing time-series (saving zero-dm)"`date`
+mv ${inputfile}.0000.00.tim ${inputfile}.${beam}.0000.00.tim
+rm -f ${inputfile}.????.??.tim >& /dev/null
+
 
 
 echo "[HITRUN] DONE "`date`
