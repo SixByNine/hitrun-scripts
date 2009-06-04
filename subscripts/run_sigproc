@@ -1,0 +1,14 @@
+seek:
+cp $zapfile ./zapfile
+echo "[HITRUN] Seeking using $nthread threads, with options '-head -recon -fftw' "`date`
+set cmd="$utils/multiseek $sigproc/seek $nthread $inputfile $inputfile $tlength '-head -recon -fftw -p5 -zzapfile '"
+set cmd="$timer$cmd"
+echo "$timer$cmd"
+$timer$utils/multiseek $sigproc/seek $nthread $inputfile $inputfile $tlength '-head -recon -fftw -p5 -zzapfile'
+set ex=$?
+if ( $ex != 0 ) then
+	echo "[HITRUN] ERROR: multi-threaded seek failed"
+	echo "Failed command was:"
+	echo $cmd
+	exit $ex
+endif

@@ -1,0 +1,31 @@
+presto:
+cp $zapfile ./zapfile
+rm -f tasklist
+touch tasklist
+
+foreach timfile (`ls $inputfile.*.tim`)
+	set dm = `$sigproc/header $timfile -dm`
+	set val = `$pulsarchunter/pch-dmcomp $psrxml -d $dm -S -F`
+	set nscr = `echo $val | cut -d " " -f 1`
+	set nsamp = `echo $val | cut -d " " -f 2`
+
+	echo -n "$sigproc/makePsrXml $timfile > $timfile.xml" >> tasklist
+	echo -n " && $pulsarchunter/pch-seek $timfile.xml --write-presto-fft $timfile --fft-size $nsamp --tscrunch $nscr" >> tasklist
+	echo -n " && $presto/rednoise $timfile.fft && \mv -f ${timfile}_red.fft $timfile.fft" >> tasklist
+	echo -n " && $presto/accelsearch -zmax $zmax -fhi 1500 -flo 1.0 -numharm 16  $timfile.fft" >> tasklist
+	echo " && /bin/rm -f $timfile.fft $timfile.inf $timfile.xml ${timfile}_ACCEL_*.*" >> tasklist
+end
+
+echo "[HITRUN] Searching using $nthread threads, with pch-seek and accelsearch "`date`
+set cmd="$utils/multitask tasklist $nthread"
+set cmd="$timer$cmd"
+echo $cmd
+$cmd
+set ex=$?
+if ( $ex != 0 ) then
+	echo "[HITRUN] ERROR: multi-threaded pch-seek/accelsearch failed"
+	echo "Failed command was:"
+	echo $cmd
+	exit $ex
+endif
+
