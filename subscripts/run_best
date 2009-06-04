@@ -23,7 +23,7 @@ echo "[HITRUN] Using dspsr to fold candidates "`date`
 rm grand.dat >&/dev/null
 
 set subint_length = `$sigproc/header $inputfile -tobs | awk '{print $1/32.0}'`
-foreach cand (`ls ${inputfile}${cand_ext}*.phcx.gz`)
+foreach cand (`ls ${inputfile}${cand_ext}_???.phcx.gz`)
 	set dm = `grep $cand $inputfile$cand_ext.lis | awk '{print $4}'`
 	set period = `grep $cand $inputfile$cand_ext.lis | awk '{print $3/1000.0}'`
 	set accn = `grep $cand $inputfile$cand_ext.lis | awk '{print $5}'`

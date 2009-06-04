@@ -55,7 +55,7 @@ set jump=start
 set ddgulp=1000000
 set sigproc_snrlimit=6
 set presto_snrlimit=3
-set dm_substep_size=2000
+set max_tim=1000
 
 
 if ( $# < 1 ) then
@@ -86,7 +86,8 @@ echo "HITRUN               = $HITRUN"
 echo "HITRUN_NTHREADS      = $nthread"
 echo "HITRUN_KILLFILE_MODE = $HITRUN_KILLFILE_MODE"
 echo "HITRUN_FFT_MODE      = $HITRUN_FFT_MODE"
-echo "dm range             = $mindm -> $maxdm (substep=$dm_substep_size)"
+echo "dm range             = $mindm -> $maxdm"
+echo "max tim files at once= $max_tim"
 echo "chankill             = $chankill"
 echo "zapfile              = $zapfile"
 echo ""
@@ -150,7 +151,7 @@ endif
 dedisperse:
 
 set sub_mindm=$mindm
-set sub_maxdm=$dm_substep_size
+set sub_maxdm=`$pulsarchunter/pch-dmcomp $psrxml -d $sub_mindm -N $max_tim`
 
 while ( `echo $sub_mindm $maxdm | awk '{if($1 < $2) { print 1 } else { print 0 } }'` )
 	rm -f ${inputfile}.????.??.tim
@@ -180,8 +181,8 @@ while ( `echo $sub_mindm $maxdm | awk '{if($1 < $2) { print 1 } else { print 0 }
 	if ( -e ${inputfile}.0000.00.tim ) mv ${inputfile}.0000.00.tim ${inputfile}.${beam}.0000.00.tim
 
 	set sub_mindm = $sub_maxdm
-	set dm_substep_size = `echo $dm_substep_size | awk '{ print $1*2 }'`
-	set sub_maxdm = `echo $sub_maxdm $dm_substep_size | awk '{ print $1+$2 }'`
+	set sub_maxdm=`$pulsarchunter/pch-dmcomp $psrxml -d $sub_mindm -N $max_tim`
+
 end
 
 best:
