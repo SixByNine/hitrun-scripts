@@ -6,9 +6,11 @@ if ( $# < 1 ) then
 endif
 
 set filename = $1
+set freq_kill = $2
 
 if ( -e $filename == 0 ) then
 	echo "selected file '$filename' does not exist"
+	exit -2
 endif
 
 set dedisperse_all = $HITRUN/bin/dedisperse_all
@@ -16,7 +18,7 @@ set zaptime = $HITRUN/bin/giant
 set filedit = $HITRUN/bin/filedit
 
 echo "Making DM=0 timeseries"
-set cmd="${dedisperse_all} ${filename} -d 0 0 -g 1000000"
+set cmd="${dedisperse_all} ${filename} -d 0 0 -g 1000000 -k $freq_kill" 
 echo $cmd
 $cmd
 

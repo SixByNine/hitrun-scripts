@@ -27,6 +27,7 @@ setenv PULSARHUNTER_HOME $HITRUN/pulsarhunter
 setenv HITRUN_NTHREADS 1
 setenv HITRUN_FFT_MODE "SIGPROC"
 setenv HITRUN_KILLFILE_MODE "FIXED"
+setenv HITRUN_TIMEZAP_MODE "GIANT"
 setenv LD_LIBRARY_PATH ${PGPLOT_DIR}:$LD_LIBRARY_PATH
 
 
@@ -86,6 +87,7 @@ echo "HITRUN               = $HITRUN"
 echo "HITRUN_NTHREADS      = $nthread"
 echo "HITRUN_KILLFILE_MODE = $HITRUN_KILLFILE_MODE"
 echo "HITRUN_FFT_MODE      = $HITRUN_FFT_MODE"
+echo "HITRUN_TIMEZAP_MODE  = $HITRUN_TIMEZAP_MODE"
 echo "dm range             = $mindm -> $maxdm"
 echo "max tim files at once= $max_tim"
 echo "chankill             = $chankill"
@@ -128,7 +130,7 @@ if ( "$HITRUN_KILLFILE_MODE" == "FIXED" ) then
 		sed -ie "${ch1}s:1:0:" $inputfile.killfile
 	end
 	cp $chankill ${inputfile}.dspsrzap
-	goto dedisperse
+	goto tzap
 endif
 
 if ( "$HITRUN_KILLFILE_MODE" == "SWIN" ) then
@@ -145,8 +147,25 @@ if ( "$HITRUN_KILLFILE_MODE" == "SWIN" ) then
 		echo $cmd
 		exit $ex
 	endif
+	goto tzap
+endif
+
+tzap:
+if ( "$HITRUN_TIMEZAP_MODE" == "GIANT") then
+	set cmd="$utils/timekill $inputfile $inputfile.killfile"
+	set cmd="$timer$cmd"
+	echo $cmd
+	$cmd
+	set ex=$?
+	if ($ex != 0 ) then
+		echo "[HITRUN] ERROR: Time domain zapping failed"
+		echo "Failed command was:"
+		echo $cmd
+		exit $ex
+	endif
 	goto dedisperse
 endif
+
 
 dedisperse:
 
