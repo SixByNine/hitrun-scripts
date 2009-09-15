@@ -154,7 +154,7 @@ set sub_mindm=$mindm
 set sub_maxdm=`$pulsarchunter/pch-dmcomp $psrxml -d $sub_mindm -N $max_tim`
 
 while ( `echo $sub_mindm $maxdm | awk '{if($1 < $2) { print 1 } else { print 0 } }'` )
-	rm -f ${inputfile}.????.??.tim
+	\rm -f ${inputfile}.????.??.tim
 	set sub_maxdm = `echo $sub_maxdm $maxdm | awk '{if($1 > $2) { print $2 } else { print $1 }}'`
 
 	echo "[HITRUN] Dedispersing up to DM=$maxdm cm^-3.pc "`date`
@@ -182,7 +182,6 @@ while ( `echo $sub_mindm $maxdm | awk '{if($1 < $2) { print 1 } else { print 0 }
 
 	set sub_mindm = $sub_maxdm
 	set sub_maxdm=`$pulsarchunter/pch-dmcomp $psrxml -d $sub_mindm -N $max_tim`
-
 end
 
 best:
