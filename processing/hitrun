@@ -136,7 +136,7 @@ endif
 if ( "$HITRUN_KILLFILE_MODE" == "SWIN" ) then
 
 	echo "[HITRUN] Creating 'killfile' to remove bad channels "`date`
-	set cmd="$utils/make_killfile $inputfile $chankill"
+	set cmd="$utils/make_killfile_shredder $inputfile $chankill"
 	set cmd="$timer$cmd"
 	echo $cmd
 	$cmd # execute the command
@@ -189,12 +189,16 @@ while ( `echo $sub_mindm $maxdm | awk '{if($1 < $2) { print 1 } else { print 0 }
 		exit $ex
 	endif
 
-	if ( "$HITRUN_FFT_MODE" == "PRESTO" || "$HITRUN_FFT_MODE" == "SIGPROC&PRESTO") then
+	if ( "$HITRUN_FFT_MODE" =~ "PRESTO") then
 		source $HITRUN/scripts/subscripts/run_presto
 	endif
 
-	if ( "$HITRUN_FFT_MODE" == "SIGPROC" || "$HITRUN_FFT_MODE" == "SIGPROC&PRESTO") then
+	if ( "$HITRUN_FFT_MODE" =~ "SIGPROC") then
 		source $HITRUN/scripts/subscripts/run_sigproc
+	endif
+
+	if ( "$HITRUN_FFT_MODE" =~ "PCHSEEK") then
+		source $HITRUN/scripts/subscripts/run_pchseek
 	endif
 
 	if ( -e ${inputfile}.0000.00.tim ) mv ${inputfile}.0000.00.tim ${inputfile}.${beam}.0000.00.tim
@@ -204,7 +208,7 @@ while ( `echo $sub_mindm $maxdm | awk '{if($1 < $2) { print 1 } else { print 0 }
 end
 
 best:
-if ( "$HITRUN_FFT_MODE" == "PRESTO" || "$HITRUN_FFT_MODE" == "SIGPROC&PRESTO") then
+if ( "$HITRUN_FFT_MODE" =~ "PRESTO") then
 	ls ${inputfile}*_ACCEL_* >! ${inputfile}.accelsearch
 	set prdfile = ${inputfile}.accelsearch
 	set cand_ext="_presto"
@@ -213,7 +217,18 @@ if ( "$HITRUN_FFT_MODE" == "PRESTO" || "$HITRUN_FFT_MODE" == "SIGPROC&PRESTO") t
 	source $HITRUN/scripts/subscripts/run_best
 endif
 
-if ( "$HITRUN_FFT_MODE" == "SIGPROC" || "$HITRUN_FFT_MODE" == "SIGPROC&PRESTO") then
+if ( "$HITRUN_FFT_MODE" =~ "PCHSEEK") then
+	\rm -f ${inputfile}_pch.prd
+	cat *.pch.prd >! ${inputfile}_pch.prd
+	# we delete them so that sigproc doesn't find them by mistake
+	\rm -f *.pch.prd
+	set prdfile = ${inputfile}_pch.prd
+	set cand_ext="_pch"
+	set snr_lim=$sigproc_snrlimit
+	source $HITRUN/scripts/subscripts/run_best
+endif
+
+if ( "$HITRUN_FFT_MODE" =~ "SIGPROC") then
 	\rm -f $inputfile.prd
 	cat *.prd >! $inputfile.prd
 	set prdfile = $inputfile.prd
@@ -221,6 +236,7 @@ if ( "$HITRUN_FFT_MODE" == "SIGPROC" || "$HITRUN_FFT_MODE" == "SIGPROC&PRESTO") 
 	set snr_lim=$sigproc_snrlimit
 	source $HITRUN/scripts/subscripts/run_best
 endif
+
 
 
 echo "[HITRUN] Removing time-series (saving zero-dm)"`date`

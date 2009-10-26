@@ -10,6 +10,7 @@ outfile=$3
 filfile=$4
 tlength=$5
 options="$6"
+output_cmd=""
 
 date=`date +%s`
 
@@ -24,7 +25,14 @@ for file in `ls $filfile*.tim`; do
 	rm -f $file.prd
 	touch seeklist.$i
 	#echo "$seek $file -q -fftw -t$tlength > /dev/null" >> seeklist.$i
-	echo "$seek $file -t$tlength $options $A> /dev/null" >> seeklist.$i
+
+	if [[ "$seek" =~ "pch-seek" ]] ; then
+		output_cmd="--write-prd $file.prd"
+		file=$file.xml
+		makePsrXml $file > $file.xml
+	fi
+
+	echo "$seek $file $output_cmd -t$tlength $options $A> /dev/null" >> seeklist.$i
 	A='-A'
 	i=`expr $i + 1`
 

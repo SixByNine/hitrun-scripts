@@ -1,0 +1,14 @@
+seek:
+cp $zapfile ./zapfile
+echo "[HITRUN] Pulsarchunting using $nthread threads, with options '--write-prd $inputfile.prd -H "2 4 8 16" --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile'"`date`
+set cmd="$utils/multiseek $pulsarchunter/pch-seek $nthread $inputfile $inputfile "" '--write-prd $inputfile.prd -H "2 4 8 16" --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile '"
+set cmd="$timer$cmd"
+echo "$timer$cmd"
+$timer$utils/multiseek $pulsarchunter/pch-seek $nthread $inputfile $inputfile "" '--write-prd $inputfile.prd -H "2 4 8 16" --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile '
+set ex=$?
+if ( $ex != 0 ) then
+	echo "[HITRUN] ERROR: multi-threaded pch-seek failed"
+	echo "Failed command was:"
+	echo $cmd
+	exit $ex
+endif
