@@ -218,10 +218,6 @@ if ( "$HITRUN_FFT_MODE" =~ "PRESTO") then
 endif
 
 if ( "$HITRUN_FFT_MODE" =~ "PCHSEEK") then
-	\rm -f ${inputfile}_pch.prd
-	cat *.pch.prd >! ${inputfile}_pch.prd
-	# we delete them so that sigproc doesn't find them by mistake
-	\rm -f *.pch.prd
 	set prdfile = ${inputfile}_pch.prd
 	set cand_ext="_pch"
 	set snr_lim=$sigproc_snrlimit
@@ -229,8 +225,6 @@ if ( "$HITRUN_FFT_MODE" =~ "PCHSEEK") then
 endif
 
 if ( "$HITRUN_FFT_MODE" =~ "SIGPROC") then
-	\rm -f $inputfile.prd
-	cat *.prd >! $inputfile.prd
 	set prdfile = $inputfile.prd
 	set cand_ext=""
 	set snr_lim=$sigproc_snrlimit

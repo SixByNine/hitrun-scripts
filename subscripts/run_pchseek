@@ -1,10 +1,14 @@
+#!/bin/tcsh
 seek:
-cp $zapfile ./zapfile
-echo "[HITRUN] Pulsarchunting using $nthread threads, with options '--write-prd $inputfile.prd -H "2 4 8 16" --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile'"`date`
-set cmd="$utils/multiseek $pulsarchunter/pch-seek $nthread $inputfile $inputfile "" '--write-prd $inputfile.prd -H "2 4 8 16" --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile '"
-set cmd="$timer$cmd"
+if ( -e $zapfile ) then
+	cp $zapfile ./zapfile
+else
+	echo "# Empty Zapfile" >! zapfile
+endif
+echo "[HITRUN] Pulsarchunting using $nthread threads, with options ' -H 2 4 8 16 --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile'" `date`
+set cmd="$utils/multiseek $pulsarchunter/pch-seek $nthread ${inputfile}_pch ${inputfile} "''" -H 2 4 8 16 --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile"
 echo "$timer$cmd"
-$timer$utils/multiseek $pulsarchunter/pch-seek $nthread $inputfile $inputfile "" '--write-prd $inputfile.prd -H "2 4 8 16" --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile '
+$timer$utils/multiseek $pulsarchunter/pch-seek $nthread ${inputfile}_pch ${inputfile} "" ' -H "2 4 8 16" --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile'
 set ex=$?
 if ( $ex != 0 ) then
 	echo "[HITRUN] ERROR: multi-threaded pch-seek failed"

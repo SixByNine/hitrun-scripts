@@ -16,8 +16,10 @@ date=`date +%s`
 
 A=''
 i=0
-rm -f seeklist.*
-for file in `ls $filfile*.tim`; do
+\rm -f seeklist.*
+\rm -f $filfile.????.??.prd
+\rm -f $outfile.prd
+for file in `ls $filfile.????.??.tim`; do
 	if [[ $i -ge $nthread ]] ; then
 		i=0
 	fi
@@ -27,9 +29,10 @@ for file in `ls $filfile*.tim`; do
 	#echo "$seek $file -q -fftw -t$tlength > /dev/null" >> seeklist.$i
 
 	if [[ "$seek" =~ "pch-seek" ]] ; then
-		output_cmd="--write-prd $file.prd"
-		file=$file.xml
+		seekfname=`basename $file .tim`
+		output_cmd="--write-prd $seekfname.prd"
 		makePsrXml $file > $file.xml
+		file=$file.xml
 	fi
 
 	echo "$seek $file $output_cmd -t$tlength $options $A> /dev/null" >> seeklist.$i
@@ -51,10 +54,9 @@ done
 
 rm $outfile.prd
 echo "Making final prd file: $outfile.prd"
-touch $outfile.prd
 
-cat $filfile*.prd >> tmp
-cat tmp >> $outfile.prd
-rm tmp
+cat $filfile.????.??.prd > $outfile.prd
+\rm -r $filfile.????.??.prd
+\rm -r $filfile.????.??.tim.xml
 
 echo "done"
