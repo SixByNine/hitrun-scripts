@@ -5,10 +5,21 @@ if ( -e $zapfile ) then
 else
 	echo "# Empty Zapfile" >! zapfile
 endif
+
+set pchseek_append=""
+if ( $?have_pchseeked ) then
+	set pchseek_append="-A"
+else
+	set have_pchseeked="YES"
+	\rm -f ${inputfile}_pch.prd
+	touch ${inputfile}_pch.prd
+endif
+
+
 echo "[HITRUN] Pulsarchunting using $nthread threads, with options ' -H 2 4 8 16 --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile'" `date`
 set cmd="$utils/multiseek $pulsarchunter/pch-seek $nthread ${inputfile}_pch ${inputfile} "''" -H 2 4 8 16 --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile"
 echo "$timer$cmd"
-$timer$utils/multiseek $pulsarchunter/pch-seek $nthread ${inputfile}_pch ${inputfile} "" ' -H "2 4 8 16" --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile'
+$timer$utils/multiseek $pulsarchunter/pch-seek $nthread ${inputfile}_pch ${inputfile} "" ' -H "2 4 8 16" --normalise-agl --twiddle-amps --harmfold-smart --zapfile zapfile' $pchseek_append
 set ex=$?
 if ( $ex != 0 ) then
 	echo "[HITRUN] ERROR: multi-threaded pch-seek failed"

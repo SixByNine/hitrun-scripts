@@ -14,11 +14,10 @@ output_cmd=""
 
 date=`date +%s`
 
-A=''
+A="$7"
 i=0
 \rm -f seeklist.*
 \rm -f $filfile.????.??.prd
-\rm -f $outfile.prd
 for file in `ls $filfile.????.??.tim`; do
 	if [[ $i -ge $nthread ]] ; then
 		i=0
@@ -26,7 +25,6 @@ for file in `ls $filfile.????.??.tim`; do
 
 	rm -f $file.prd
 	touch seeklist.$i
-	#echo "$seek $file -q -fftw -t$tlength > /dev/null" >> seeklist.$i
 
 	if [[ "$seek" =~ "pch-seek" ]] ; then
 		seekfname=`basename $file .tim`
@@ -35,7 +33,7 @@ for file in `ls $filfile.????.??.tim`; do
 		file=$file.xml
 	fi
 
-	echo "$seek $file $output_cmd -t$tlength $options $A> /dev/null" >> seeklist.$i
+	echo "$seek $file $output_cmd -t$tlength $options $A > /dev/null" >> seeklist.$i
 	A='-A'
 	i=`expr $i + 1`
 
@@ -52,10 +50,9 @@ for ((i=0;i<$nthread;i+=1)); do
 	echo "done $i"
 done
 
-rm $outfile.prd
 echo "Making final prd file: $outfile.prd"
 
-cat $filfile.????.??.prd > $outfile.prd
+cat $filfile.????.??.prd >> $outfile.prd
 \rm -r $filfile.????.??.prd
 \rm -r $filfile.????.??.tim.xml
 
