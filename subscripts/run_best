@@ -116,10 +116,10 @@ foreach cand (`ls ${inputfile}${cand_ext}*.phcx`)
 	set fscint = $cline[10]
 	set tfscint = $cline[11]
 
-	set fold = `cat ${inputfile}.lis | grep $cand | awk '{print $8}'`
-	set bestsnr = `cat ${inputfile}.lis | grep $cand | awk '{print $2}'`
+	set fold = `cat ${inputfile}${cand_ext}.lis | grep $cand | awk '{print $8}'`
+	set bestsnr = `cat ${inputfile}${cand_ext}.lis | grep $cand | awk '{print $2}'`
 
-	echo "${suspect_short} ${beam} ${gl} ${gb} ${MJD} ${p} ${p_err} ${DM} ${DM_err} ${width} ${widthratio} ${fold} ${snr} ${bestsnr} ${tscint} ${fscint} ${tfscint}" >>! ${inputfile}${cand_ext}.summary
+	echo "${suspect} ${beam} ${gl} ${gb} ${MJD} ${p} ${p_err} ${DM} ${DM_err} ${width} ${widthratio} ${fold} ${snr} ${bestsnr} ${tscint} ${fscint} ${tfscint}" >>! ${inputfile}${cand_ext}.summary
 
 
 end
