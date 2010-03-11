@@ -14,8 +14,13 @@ endif
 set filename = $1
 
 if ( $# > 1 ) then
-	set alwayskill=$2
+	set conffile=$2
 endif
+
+if ( $# > 2 ) then
+	set alwayskill=$3
+endif
+
 
 if ( -e $filename == 0 ) then
 	echo "selected file '$filename' does not exist"
@@ -26,9 +31,11 @@ set thresh=15 # inital threashold for birdie zapping
 set nsum=1
 set start_ch = 0
 set end_ch = $nch
-if ( -e $HITRUN/config ) then
-	source $HITRUN/config
+
+if ( -e $conffile ) then
+	source $conffile
 endif
+
 if ( ! ${?HITRUN_NTHREADS} ) then
 	setenv HITRUN_NTHREADS 4
 endif

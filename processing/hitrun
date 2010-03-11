@@ -28,6 +28,7 @@ setenv HITRUN_NTHREADS 1
 setenv HITRUN_FFT_MODE "SIGPROC"
 setenv HITRUN_KILLFILE_MODE "FIXED"
 setenv HITRUN_TIMEZAP_MODE "GIANT"
+setenv HITRUN_BEST "PHBEST"
 setenv LD_LIBRARY_PATH ${PGPLOT_DIR}:$LD_LIBRARY_PATH
 
 
@@ -136,7 +137,7 @@ endif
 if ( "$HITRUN_KILLFILE_MODE" == "SWIN" ) then
 
 	echo "[HITRUN] Creating 'killfile' to remove bad channels "`date`
-	set cmd="$utils/make_killfile_shredder $inputfile $chankill"
+	set cmd="$utils/make_killfile_shredder $inputfile $conffile $chankill"
 	set cmd="$timer$cmd"
 	echo $cmd
 	$cmd # execute the command
@@ -189,15 +190,15 @@ while ( `echo $sub_mindm $maxdm | awk '{if($1 < $2) { print 1 } else { print 0 }
 		exit $ex
 	endif
 
-	if ( "$HITRUN_FFT_MODE" =~ "PRESTO") then
+	if ( `echo $HITRUN_FFT_MODE | awk '{print $1 ~ "PRESTO"}'` ) then
 		source $HITRUN/scripts/subscripts/run_presto
 	endif
 
-	if ( "$HITRUN_FFT_MODE" =~ "SIGPROC") then
+	if ( `echo $HITRUN_FFT_MODE | awk '{print $1 ~ "SIGPROC"}'` ) then
 		source $HITRUN/scripts/subscripts/run_sigproc
 	endif
 
-	if ( "$HITRUN_FFT_MODE" =~ "PCHSEEK") then
+	if ( `echo $HITRUN_FFT_MODE | awk '{print $1 ~ "PCHSEEK"}'` ) then
 		source $HITRUN/scripts/subscripts/run_pchseek
 	endif
 
@@ -208,26 +209,32 @@ while ( `echo $sub_mindm $maxdm | awk '{if($1 < $2) { print 1 } else { print 0 }
 end
 
 best:
-if ( "$HITRUN_FFT_MODE" =~ "PRESTO") then
+if ( `echo $HITRUN_FFT_MODE | awk '{print $1 ~ "PRESTO"}'` ) then
 	ls ${inputfile}*_ACCEL_* >! ${inputfile}.accelsearch
 	set prdfile = ${inputfile}.accelsearch
 	set cand_ext="_presto"
 	set snr_lim=$presto_snrlimit
-
+	set newbest=0
 	source $HITRUN/scripts/subscripts/run_best
 endif
 
-if ( "$HITRUN_FFT_MODE" =~ "PCHSEEK") then
+if ( `echo $HITRUN_FFT_MODE | awk '{print $1 ~ "PCHSEEK"}'` ) then
 	set prdfile = ${inputfile}_pch.prd
 	set cand_ext="_pch"
 	set snr_lim=$sigproc_snrlimit
+	set newbest=0
 	source $HITRUN/scripts/subscripts/run_best
 endif
 
-if ( "$HITRUN_FFT_MODE" =~ "SIGPROC") then
+if ( `echo $HITRUN_FFT_MODE | awk '{print $1 ~ "SIGPROC"}'` ) then
 	set prdfile = $inputfile.prd
 	set cand_ext=""
 	set snr_lim=$sigproc_snrlimit
+	set newbest=0
+	if ( `echo $HITRUN_BEST | awk '{print $1 ~ "MJK"}'` ) then
+		set newbest=1
+	endif
+
 	source $HITRUN/scripts/subscripts/run_best
 endif
 

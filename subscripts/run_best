@@ -1,6 +1,11 @@
 best:
-echo "[HITRUN] Generating candidates with ph-best "`date`
-set cmd="$pulsarhunter/ph-best $prdfile $inputfile$cand_ext -minsnr $snr_lim"
+if ( $newbest ) then
+	echo "[HITRUN] Generating candidates with ph-best (MJK-SIGPROC-FIX)"`date`
+	set cmd="$pulsarhunter/ph-best $prdfile $inputfile$cand_ext -minsnr $snr_lim --maxresults 100 --mjksigprocfix"
+else
+	echo "[HITRUN] Generating candidates with ph-best"`date`
+	set cmd="$pulsarhunter/ph-best $prdfile $inputfile$cand_ext -minsnr $snr_lim"
+endif
 set cmd="$timer$cmd"
 echo $cmd
 $cmd
