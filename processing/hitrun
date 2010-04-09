@@ -96,6 +96,7 @@ echo "zapfile              = $zapfile"
 echo ""
 echo "Starting at          : $jump"
 
+setenv OMP_NUM_THREADS $nthread
 
 
 
