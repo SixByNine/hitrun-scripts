@@ -1,0 +1,376 @@
+#!/bin/tcsh -f
+# S.Bates 7/11/2008
+# M.Keith 2008
+
+#
+# HitRun Processing script for the awesome
+# new Parkes Multibeam Survey Mk II
+#
+# Steps:
+# 1) Create rfi kill file with 'make_killfile;
+# 2) Dedisperse with 'dedisperse_all'
+# 3) Seek each one with seek/multiseek
+# 4) Find best candidates with 'ph-best'
+# 5) Fold candidates from .fil with 'dspsr'
+# 6) Optimise candidates with 'pdmp'
+
+echo "HitRun Processing script"
+echo "========================"
+echo "Software Versions"
+$HITRUN/scripts/hitrun-getversions
+
+set conffile = $HITRUN/config/hitrun_settings
+
+setenv PULSARHUNTER_HOME $HITRUN/pulsarhunter
+# Set some defaults
+# NOTE: These will get OVERWRITTEN by the config file later on!
+setenv HITRUN_NTHREADS 1
+setenv HITRUN_FFT_MODE "SIGPROC"
+setenv HITRUN_KILLFILE_MODE "FIXED"
+setenv OMP_NUM_THREADS 4
+
+set sigproc = $HITRUN/bin
+set presto = $HITRUN/bin
+setenv PRESTO $HITRUN/install/presto
+if ( $?LD_LIBRARY_PATH ) then
+setenv LD_LIBRARY_PATH $HITRUN/lib:$LD_LIBRARY_PATH
+else
+setenv LD_LIBRARY_PATH $HITRUN/lib
+endif
+set pulsarchunter = $HITRUN/bin
+set dedisp = $HITRUN/bin/dedisperse_all.new
+set shredder = $HITRUN/bin/shredder
+set pulsarhunter = $HITRUN/pulsarhunter/scripts
+set utils=$HITRUN/scripts/utilities
+set dspsr=/nfs/cluster/psr/linux_64/bin/dspsr
+set pdmp=$HITRUN/bin/pdmp
+set psradd=$HITRUN/bin/psradd
+set zapfile=$HITRUN/config/zapfile
+set chankill=$HITRUN/config/chan_kill
+set paz=$HITRUN/bin/paz
+set psredit=$HITRUN/bin/psredit
+set deg2hr = $HITRUN/scripts/utilities/deg2hr.csh
+set foldknown = $HITRUN/scripts/utilities/fold_known_pulsars.csh
+set knownlist = /nfs/cluster/pulsar4/llevin/hitrun_shredder/known_pulsars.pipeline
+
+
+set timer="time "
+
+set maxdm=1000
+set mindm=0
+set minwidth=0.000064
+set zmax=0
+set jump=start
+set ddgulp=1000000
+
+
+if ( $# < 1 ) then
+	echo "$0 [sigproc .fil file]"
+	exit 1
+endif
+
+if ( $# > 1 ) then
+	set conffile=$2
+endif
+
+
+source $conffile
+
+setenv HITRUN_FFT_MODE_SAVE $HITRUN_FFT_MODE
+echo "Saving mode in  HITRUN_FFT_MODE_SAVE = $HITRUN_FFT_MODE"
+
+if ( $# > 2 ) then
+	set jump=$3
+endif
+
+
+set inputfile = $1
+
+set nthread=$HITRUN_NTHREADS
+
+echo "HITRUN Processing $inputfile ("`du -h $inputfile`")"
+echo "==================================================="
+echo "Config options:"
+echo "HITRUN               = $HITRUN"
+echo "HITRUN_NTHREADS      = $nthread"
+echo "HITRUN_KILLFILE_MODE = $HITRUN_KILLFILE_MODE"
+echo "HITRUN_FFT_MODE      = $HITRUN_FFT_MODE"
+echo "dm range             = $mindm -> $maxdm"
+echo "chankill             = $chankill"
+echo "zapfile              = $zapfile"
+echo ""
+echo "Starting at          : $jump"
+echo ""
+echo "Using dspsr without -Y!"
+
+
+
+set shortfile = `echo ${inputfile} | sed -e 's:\....::'`
+set psrxml = ${shortfile}.psrxml
+
+# Work out which 2^n to use...
+set nsamp=`$sigproc/header $inputfile -nsamples`
+set i=$nsamp
+set pow2=0
+while ( $i > 1 )
+set pow2=`echo $pow2 | awk '{print $0 + 1}'`
+set i=`echo $i | awk '{print int($i/2)}'`
+end
+
+set tlength=$pow2
+echo "[HITRUN] Using 2^$pow2 point transform"
+
+# Get the beam number from the header file. Bit of a dodgy awk though...
+set beam = `grep receiver_beam $psrxml | awk '{print substr($1,16,2)}'`
+
+
+# Add a goto line here if you want to jump to a partuclar part of the script!
+goto $jump
+start:
+
+echo "[HITRUN] Folding known pulsars close to pointing"
+set cmd="${foldknown} ${inputfile}"
+set cmd="$timer$cmd"
+echo $cmd
+$cmd #execute the command
+set ex=$?
+if ( $ex != 0 ) then
+    echo "[HITRUN] ERROR: known pulsar folding failed"
+        echo "Failed command was:"
+        echo $cmd
+        exit $ex
+endif
+
+if ( "$HITRUN_KILLFILE_MODE" == "FIXED" ) then
+	set nchan = `$sigproc/header $inputfile -nchans`
+	\rm -f $inputfile.killfile
+	echo "for i in `seq $nchan` ; do  echo 1 ; done" | bash > $inputfile.killfile
+	foreach ch (`cat $chankill`)
+		set ch1=`echo $ch | awk '{print $1+1}'`
+		sed -ie "${ch1}s:1:0:" $inputfile.killfile
+	end
+	cp $chankill ${inputfile}.dspsrzap
+	goto dedisperse
+endif
+
+if ( "$HITRUN_KILLFILE_MODE" == "SWIN" ) then
+
+	echo "[HITRUN] Creating 'killfile' to remove bad channels "`date`
+	set cmd="$utils/make_killfile_shredder $inputfile"
+	set cmd="$timer$cmd"
+	echo $cmd
+	$cmd # execute the command
+	set ex=$?
+	if ( $ex != 0 ) then
+		echo "[HITRUN] ERROR: killfile creation failed"
+		echo "Failed command was:"
+		echo $cmd
+		exit $ex
+	endif
+	goto dedisperse
+endif
+
+dedisperse:
+rm -f ${inputfile}*.tim
+
+echo "[HITRUN] Dedispersing up to DM=$maxdm cm^-3.pc "`date`
+set cmd="$dedisp $inputfile -d $mindm $maxdm -g $ddgulp -k $inputfile.killfile"
+set cmd="$timer$cmd"
+echo $cmd
+$cmd
+set ex=$?
+if ( $ex != 0 ) then
+	echo "[HITRUN] ERROR: dedispersion failed"
+	echo "Failed command was:"
+	echo $cmd
+	exit $ex
+endif
+
+# This is not required because we are using dspsr to fold all at once.
+#set cmd="$utils/make_dm_index_sub"
+#echo $cmd
+#$cmd
+
+if ( "$HITRUN_FFT_MODE" == "PRESTO" ) then
+	goto presto
+endif
+
+seek:
+cp $zapfile ./zapfile
+echo "[HITRUN] Seeking using $nthread threads, with options '-head -recon -fftw' "`date`
+set cmd="$utils/multiseek $sigproc/seek $nthread $inputfile $inputfile $tlength '-head -recon -fftw -p5 -zzapfile '"
+set cmd="$timer$cmd"
+echo "$timer$cmd"
+$timer$utils/multiseek $sigproc/seek $nthread $inputfile $inputfile $tlength '-head -recon -fftw -p5 -zzapfile'
+set ex=$?
+if ( $ex != 0 ) then
+	echo "[HITRUN] ERROR: multi-threaded seek failed"
+	echo "Failed command was:"
+	echo $cmd
+	exit $ex
+endif
+set prdfile = $inputfile.prd
+set cand_ext=""
+set snr_lim=6
+goto best
+
+presto:
+cp $zapfile ./zapfile
+rm -f tasklist
+touch tasklist
+
+foreach timfile (`ls $inputfile.*.tim`)
+	echo -n "$sigproc/makePsrXml $timfile > $timfile.xml" >> tasklist
+	echo -n " && $pulsarchunter/pch-seek $timfile.xml --write-presto-fft $timfile -t $tlength" >> tasklist
+	echo -n " && $presto/rednoise $timfile.fft && \mv -f ${timfile}_red.fft $timfile.fft >& /dev/null" >> tasklist
+	echo -n " && $presto/accelsearch -zmax $zmax -fhi 1500 -flo 1.0 -numharm 16  $timfile.fft >& /dev/null" >> tasklist
+	echo " && /bin/rm -f $timfile.fft $timfile.inf $timfile.xml ${timfile}_ACCEL_*.*" >> tasklist
+end
+
+echo "[HITRUN] Searching using $nthread threads, with pch-seek and accelsearch "`date`
+set cmd="$utils/multitask tasklist $nthread"
+set cmd="$timer$cmd"
+echo $cmd
+$cmd
+set ex=$?
+if ( $ex != 0 ) then
+	echo "[HITRUN] ERROR: multi-threaded pch-seek/accelsearch failed"
+	echo "Failed command was:"
+	echo $cmd
+	exit $ex
+endif
+
+ls ${inputfile}*_ACCEL_* >! ${inputfile}.accelsearch
+set prdfile = ${inputfile}.accelsearch
+set cand_ext="_presto"
+set snr_lim=4
+
+# go back to the main trunk
+goto best
+
+
+best:
+echo "[HITRUN] Generating candidates with ph-best "`date`
+set cmd="$pulsarhunter/ph-best $prdfile $inputfile$cand_ext -minsnr $snr_lim -writesum"
+set cmd="$timer$cmd"
+echo $cmd
+$cmd
+set ex=$?
+if ( $ex != 0 ) then
+	echo "[HITRUN] ERROR: ph-best failed"
+	echo "Failed command was:"
+	echo $cmd
+	exit $ex
+endif
+
+# @TODO: Here we should write out the DM-curves to '.sum' files for backwards compatability.
+
+
+test:
+rm -f tasklist >& /dev/null
+touch tasklist
+echo "[HITRUN] Using dspsr to fold candidates "`date`
+#setting dspsr variables
+rm grand.dat >&/dev/null
+
+set subint_length = `$sigproc/header $inputfile -tobs | awk '{print $1/32.0}'`
+foreach cand (`ls ${inputfile}${cand_ext}*.phcx.gz`)
+	set dm = `grep $cand $inputfile$cand_ext.lis | awk '{print $4}'`
+	if ( ${dm} == 0.000000 ) then
+	    set dm = 0.01
+	endif
+	set period = `grep $cand $inputfile$cand_ext.lis | awk '{print $3/1000.0}'`
+	set accn = `grep $cand $inputfile$cand_ext.lis | awk '{print $5}'`
+	set candshort = `echo $cand | sed -e 's:.gz$::'`
+        set archive_name = `echo $cand | sed -e 's:.phcx.gz::'`
+
+	touch ${archive_name}.dat
+#        echo "working on ${archive_name}.dat"
+        echo "SOURCE: ${archive_name}_ars" >>! ${archive_name}.dat
+	echo "PERIOD: ${period}" >>! ${archive_name}.dat
+	echo "ACC: ${accn}" >>! ${archive_name}.dat
+        echo "DM: ${dm}" >>! ${archive_name}.dat
+	echo "-P ${archive_name}.dat " >>! grand.dat
+end
+
+echo zap chan `cat ${inputfile}.dspsrzap` >! postproc
+echo "F 16" >> postproc
+
+set cmd="${dspsr} -J postproc -U1 -t4 -b 128 -L${subint_length} `cat grand.dat` ${inputfile}"
+echo $cmd
+$cmd
+set ex=$?
+if ( $ex != 0 ) then
+        echo "[HITRUN] ERROR: dspsr failed"
+        echo "Failed command was:"
+        echo $cmd
+        exit $ex
+endif
+
+fold:
+
+rm -f tasklist
+rm -f pdmp.per
+rm -f pdmp.posn
+touch tasklist
+foreach cand (`ls ${inputfile}${cand_ext}*.phcx.gz`)
+        set candshort = `echo $cand | sed -e 's:.gz$::'`
+	set archive_name = `echo $cand | sed -e 's:.phcx.gz::'`
+
+	set subdir = ${archive_name}_ars
+
+	echo "${psradd} -o $archive_name.ar $subdir/*.ar && $utils/fix_ar_header $psrxml $archive_name.ar && $pdmp -mw $minwidth -g /null -input-phcx $cand -output-phcx $candshort $archive_name.ar" >> tasklist
+end
+$utils/multitask tasklist $nthread
+
+
+rm -f  ${inputfile}${cand_ext}.summary
+echo "suspect beam gl gb MJD period p_err dm dm_err width width/period fold pdmpsnr bestsnr time_scint freq_scint time_freq_scint" > ${inputfile}${cand_ext}.summary
+foreach cand (`ls ${inputfile}${cand_ext}*.phcx`)
+	rm $cand.gz
+	gzip $cand
+        set archive_name = `echo $cand | sed -e 's:.phcx::'`
+
+	# make summary file
+	set bline = `cat pdmp.posn | grep ${archive_name}.ar`
+	set cline = `cat pdmp.per | grep ${archive_name}.ar`
+	set suspect = $bline[10]
+	set suspect_short = `echo ${suspect} | awk '{print substr($1,6,32)}'`
+	set susno = $bline[1]
+	set gl = $bline[2]
+	set gb = $bline[3]
+	set MJD = $bline[5]
+	set p = $bline[6] 
+	set p_err = $bline[7]
+	set DM = $bline[8]
+	set DM_err = $bline[9]
+	set width = $cline[6]
+	set widthratio = `echo ${width} ${p} | awk '{print $1/$2}'`
+	set snr = $bline[4]
+	set tscint = $cline[9]
+	set fscint = $cline[10]
+	set tfscint = $cline[11]
+
+	set fold = `cat ${inputfile}${cand_ext}.lis | grep $cand | awk '{print $8}'`
+	set bestsnr = `cat ${inputfile}${cand_ext}.lis | grep $cand | awk '{print $2}'`
+
+	echo "${suspect} ${beam} ${gl} ${gb} ${MJD} ${p} ${p_err} ${DM} ${DM_err} ${width} ${widthratio} ${fold} ${snr} ${bestsnr} ${tscint} ${fscint} ${tfscint}" >>! ${inputfile}${cand_ext}.summary
+
+
+end
+
+if ( "$HITRUN_FFT_MODE" == "SIGPROC&PRESTO" ) then
+	setenv HITRUN_FFT_MODE "PRESTO"
+	goto presto
+endif
+
+echo "[HITRUN] Removing time-series (saving zero-dm)"`date`
+mv ${inputfile}.0000.00.tim ${inputfile}.${beam}.0000.00.tim
+rm -f ${inputfile}.????.??.tim >& /dev/null
+
+if ( "$HITRUN_FFT_MODE_SAVE" == "SIGPROC&PRESTO" ) then
+    echo "[HITRUN] Folding known pulsars to get S/N and add pulsar to list: $knownlist"
+    /home/ssi/llevin/mbplot/find_pulsars_pipeline known_pulsars.list ${inputfile}.summary ${inputfile}_presto.summary >> $knownlist
+endif
+
+echo "[HITRUN] DONE "`date`
