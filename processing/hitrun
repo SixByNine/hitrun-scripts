@@ -232,11 +232,11 @@ while ( `echo $sub_mindm $maxdm | awk '{if($1 < $2) { print 1 } else { print 0 }
 			ln -s $ddown $cname.dmlo
 			set window=`pch-dmcomp $psrxml -l -d $dm | awk -v pw=$pw '{printf("%f",($2+pw)*3)}'`
 			set st=`echo $pstart $window | awk '{print $1-$2/3.0}'`
-			cmd="$quickgplot $cname -dec $box -s $st -r $window"
+			set cmd="$quickgplot $cname -dec $box -s $st -r $window"
 			echo "$dm $pw"
 			echo $cmd
 			$cmd
-			ex=$?
+			set ex=$?
 			if ( $ex != 0 ) then
 				echo "ERROR: SP plotting failed for '$pulse'"
 			endif
@@ -320,9 +320,6 @@ if ( `echo $HITRUN_FFT_MODE | awk '{print $1 ~ "SIGPROC"}'` ) then
 
 	source $HITRUN/scripts/subscripts/run_best
 endif
-
-#TESTY
-exit 1
 
 echo "[HITRUN] Removing time-series (saving zero-dm)"`date`
 rm -f ${inputfile}.????.??.tim >& /dev/null
