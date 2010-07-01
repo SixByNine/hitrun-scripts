@@ -28,6 +28,7 @@ setenv HITRUN_NTHREADS 1
 setenv HITRUN_FFT_MODE "SIGPROC"
 setenv HITRUN_KILLFILE_MODE "FIXED"
 setenv HITRUN_TIMEZAP_MODE "GIANT"
+setenv HITRUN_SP_SEARCH "ON"
 setenv HITRUN_BEST "PHBEST"
 setenv LD_LIBRARY_PATH ${PGPLOT_DIR}:$LD_LIBRARY_PATH
 
@@ -45,6 +46,7 @@ set zapfile=$HITRUN/config/zapfile
 set chankill=$HITRUN/config/chan_kill
 set paz=$HITRUN/bin/paz
 set psredit=$HITRUN/bin/psredit
+set quickgplot=$HITRUN/bin/quickgplot
 set deg2hr = $HITRUN/scripts/utilities/deg2hr.csh
 
 set timer="time "
@@ -58,10 +60,16 @@ set ddgulp=1000000
 set sigproc_snrlimit=6
 set presto_snrlimit=3
 set max_tim=1000
-
+set giant_settings="-mb"
 
 if ( $# < 1 ) then
 	echo "$0 [sigproc .fil file]"
+	echo ""
+	echo -n "Create a new hitrun settings file? (y/n)"
+	set a=$<
+	if ( $a == "y" ) then
+		$HITRUN/scripts/utilities/create_hitrun_settings
+	endif
 	exit 1
 endif
 
@@ -89,6 +97,7 @@ echo "HITRUN_NTHREADS      = $nthread"
 echo "HITRUN_KILLFILE_MODE = $HITRUN_KILLFILE_MODE"
 echo "HITRUN_FFT_MODE      = $HITRUN_FFT_MODE"
 echo "HITRUN_TIMEZAP_MODE  = $HITRUN_TIMEZAP_MODE"
+echo "HITRUN_SP_SEARCH     = $HITRUN_SP_SEARCH ($giant_settings)"
 echo "dm range             = $mindm -> $maxdm"
 echo "max tim files at once= $max_tim"
 echo "chankill             = $chankill"
@@ -102,6 +111,12 @@ setenv OMP_NUM_THREADS $nthread
 
 set shortfile = `echo ${inputfile} | sed -e 's:\....::'`
 set psrxml = ${shortfile}.psrxml
+
+if ( -e $psrxml ) then
+	echo $psrxml
+else
+	makePsrXml $inputfile > $psrxml
+endif
 
 # Work out which 2^n to use...
 set nsamp=`$sigproc/header $inputfile -nsamples`
@@ -171,6 +186,12 @@ endif
 
 dedisperse:
 
+
+set giant_mode=""
+if ( `echo $HITRUN_SP_SEARCH | awk '{print $1 ~ "ON"}'` ) then
+	set giant_mode="-G $giant_settings"
+endif
+
 set sub_mindm=$mindm
 set sub_maxdm=`$pulsarchunter/pch-dmcomp $psrxml -d $sub_mindm -N $max_tim`
 
@@ -179,7 +200,7 @@ while ( `echo $sub_mindm $maxdm | awk '{if($1 < $2) { print 1 } else { print 0 }
 	set sub_maxdm = `echo $sub_maxdm $maxdm | awk '{if($1 > $2) { print $2 } else { print $1 }}'`
 
 	echo "[HITRUN] Dedispersing up to DM=$maxdm cm^-3.pc "`date`
-	set cmd="$dedisp $inputfile -d $sub_mindm $sub_maxdm -g $ddgulp -k $inputfile.killfile"
+	set cmd="$dedisp $inputfile -d $sub_mindm $sub_maxdm -g $ddgulp -k $inputfile.killfile $giant_mode"
 	set cmd="$timer$cmd"
 	echo $cmd
 	$cmd
@@ -190,6 +211,40 @@ while ( `echo $sub_mindm $maxdm | awk '{if($1 < $2) { print 1 } else { print 0 }
 		echo $cmd
 		exit $ex
 	endif
+
+	if ( `echo $HITRUN_SP_SEARCH | awk '{print $1 ~ "PLOT"}'` ) then
+		foreach pulse ( `ls *.pulse` )
+			set pw=`echo $pulse | awk -F "_" '{print $5}'`
+			set dm=`echo $pulse | awk -F "_" '{print $7}'`
+			set box=`echo $pulse | awk -F "_" '{print $6}'`
+			set snr=`echo $pulse | awk -F "_" '{print $2}'`
+			set pstart=`echo $pulse | awk -F "_" '{print $3}'`
+			set fn=`echo $pulse | awk -F "_" '{print $8}'`
+			set bm=`echo $pulse | awk -F "_" '{print $9}'| sed -e 's:\.pulse::'`
+			set cname="${fn}_at_${pstart}_DM_${dm}_SNR_${snr}_beam$bm"
+			ln -s $inputfile $cname.fil
+			ln -s $inputfile.$dm.tim $cname.beam1
+			ln -s ${inputfile}.0000.00.tim $cname.dm0
+			ln -s $pulse $cname.PULSEDATA
+			set dup=`ls *.tim | grep $dm -A 1 -B 1 | tail -n 1`
+			set ddown=`ls *.tim | grep $dm -A 1 -B 1 | head -n 1`
+			ln -s $dup $cname.dmhi
+			ln -s $ddown $cname.dmlo
+			set window=`pch-dmcomp $psrxml -l -d $dm | awk -v pw=$pw '{printf("%f",($2+pw)*3)}'`
+			set st=`echo $pstart $window | awk '{print $1-$2/3.0}'`
+			cmd="$quickgplot $cname -dec $box -s $st -r $window"
+			echo "$dm $pw"
+			echo $cmd
+			$cmd
+			ex=$?
+			if ( $ex != 0 ) then
+				echo "ERROR: SP plotting failed for '$pulse'"
+			endif
+		end
+
+	endif
+
+
 
 	if ( `echo $HITRUN_FFT_MODE | awk '{print $1 ~ "PRESTO"}'` ) then
 		source $HITRUN/scripts/subscripts/run_presto
@@ -203,11 +258,38 @@ while ( `echo $sub_mindm $maxdm | awk '{if($1 < $2) { print 1 } else { print 0 }
 		source $HITRUN/scripts/subscripts/run_pchseek
 	endif
 
-	if ( -e ${inputfile}.0000.00.tim ) mv ${inputfile}.0000.00.tim ${inputfile}.${beam}.0000.00.tim
+	if ( -e ${inputfile}.0000.00.tim ) then
+		mv ${inputfile}.0000.00.tim ${inputfile}.${beam}.0000.00.tim
+		ln -s ${inputfile}.${beam}.0000.00.tim ${inputfile}.0000.00.tim
+	endif
 
 	set sub_mindm = $sub_maxdm
 	set sub_maxdm=`$pulsarchunter/pch-dmcomp $psrxml -d $sub_mindm -N $max_tim`
 end
+
+if ( `echo $HITRUN_SP_SEARCH | awk '{print $1 ~ "MULTIBEAM"}'` ) then
+	ln -s ${inputfile}.${beam}.0000.00.tim ${inputfile}.0000.00.tim
+	set nspdetections = `ls *.pulse -1 | wc -l`
+	if ( $nspdetections > 0 ) then
+		echo "Tarring files:\n"
+		cp ${inputfile}.killfile ${inputfile}.${beam}.killfile
+		tar -cvf spfiles.tar ${inputfile}.${beam}.gresults ${inputfile}.${beam}.killfile *.pulse
+		touch spfiles.go
+	else 
+		if ( -e ${inputfile}.${beam}.gresults ) then
+			echo "No non-RFI single pulses found in ${inputfile} beam ${beam}\n"
+			#       touch /home/ssi/${user}/hitrun/storage/${inputfile}.${beam}.empty
+			tar -cvf spfiles.tar ${inputfile}.${beam}.gresults
+			echo "SP files tarred...\n"
+			touch spfiles.go
+			echo "SP files ready to go...\n"
+		else
+			echo "Single-pulse search failed for ${inputfile} beam ${beam}\n"
+			#			touch ${failuredir}/${inputfile}.${beam}.failed
+		endif
+	endif
+endif
+
 
 best:
 if ( `echo $HITRUN_FFT_MODE | awk '{print $1 ~ "PRESTO"}'` ) then
@@ -239,7 +321,8 @@ if ( `echo $HITRUN_FFT_MODE | awk '{print $1 ~ "SIGPROC"}'` ) then
 	source $HITRUN/scripts/subscripts/run_best
 endif
 
-
+#TESTY
+exit 1
 
 echo "[HITRUN] Removing time-series (saving zero-dm)"`date`
 rm -f ${inputfile}.????.??.tim >& /dev/null

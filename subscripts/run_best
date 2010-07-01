@@ -26,11 +26,13 @@ touch tasklist
 echo "[HITRUN] Using dspsr to fold candidates "`date`
 #setting dspsr variables
 rm grand.dat >&/dev/null
-
+set tobs = `header $inputfile -tobs`
+set tstart = `header $inputfile -tstart`
+set epoch = `echo $tstart $tobs | awk '{printf("%16.10f",$1+($2/86400/2))}'`
 set subint_length = `$sigproc/header $inputfile -tobs | awk '{print $1/32.0}'`
 foreach cand (`ls ${inputfile}${cand_ext}_???.phcx.gz`)
 	set dm = `grep $cand $inputfile$cand_ext.lis | awk '{print $4}'`
-	set period = `grep $cand $inputfile$cand_ext.lis | awk '{print $3/1000.0}'`
+	set period = `grep $cand $inputfile$cand_ext.lis | awk '{printf("%16.12f", $3/1000.0)}'`
 	set accn = `grep $cand $inputfile$cand_ext.lis | awk '{print $5}'`
 	set candshort = `echo $cand | sed -e 's:.gz$::'`
         set archive_name = `echo $cand | sed -e 's:.phcx.gz::'`
@@ -41,6 +43,7 @@ foreach cand (`ls ${inputfile}${cand_ext}_???.phcx.gz`)
 	echo "PERIOD: ${period}" >>! ${archive_name}.dat
 	echo "ACC: ${accn}" >>! ${archive_name}.dat
         echo "DM: ${dm}" >>! ${archive_name}.dat
+	echo "EPOCH: ${epoch}" >> ${archive_name}.dat
 	echo "-P ${archive_name}.dat " >>! grand.dat
 end
 

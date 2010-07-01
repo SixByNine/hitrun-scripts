@@ -1,0 +1,325 @@
+#!/bin/bash
+echo ""
+echo "CREATE hitrun_settings file"
+echo "==========================="
+echo ""
+echo "This program will help you configure the 'hitrun' script"
+echo "We will ask you a series of questions to customise the processing"
+echo "routines that are in use."
+echo ""
+echo "Press return to conitnue"
+read q
+echo ""
+echo ""
+echo ""
+echo "\$HITRUN_FFT_MODE - Choose which FFT search routines to use."
+echo " * For very large data file >2^26 points, use Presto only"
+echo ""
+echo "   0) DISABLE FFT search"
+echo "   1) Sigproc seek"
+echo "   2) Presto accelsearch"
+echo "   3) Both Presto and Sigproc"
+echo "   4) Pulsarchunter pch-seek (experimental)"
+echo -n "Choose FFT search mode [1]: "
+read q
+HITRUN_FFT_MODE="SIGPROC"
+case $q in
+	0)
+	HITRUN_FFT_MODE="NONE"
+	;;
+	1)
+	HITRUN_FFT_MODE="SIGPROC"
+	;;
+	2)
+	HITRUN_FFT_MODE="PRESTO"
+	;;
+	3)
+	HITRUN_FFT_MODE="SIGPROC_PRESTO"
+	;;
+	4)
+	HITRUN_FFT_MODE="PCHSEEK"
+	;;
+esac
+echo "\$HITRUN_FFT_MODE=$HITRUN_FFT_MODE"
+echo ""
+if [[ $HITRUN_FFT_MODE =~ "PRESTO" ]] ; then
+	echo "zmax - the presto 'zmax' acceleration search range"
+	echo " * This only affects the 'presto' mode of FFT searching"
+	echo " * see accelsearch help for more info"
+	echo ""
+	echo -n "Specify a zap file [0]: "
+	read q
+	zmax=0
+	if [[ -n "$q" ]] ; then
+		zmax=$q
+	fi
+	echo "\$zmax=$zmax"
+	echo ""
+
+	echo "\$presto_snrlimit - overide the default SNR cutoff for presto"
+	echo " * By default this is 3"
+	echo ""
+	presto_snrlimit="3.0"
+	echo "Specify a SNR cutoff [$presto_snrlimit]: "
+	if [[ -n "$q" ]] ; then
+		presto_snrlimit=$q
+	fi
+	echo "\$presto_snrlimit=$presto_snrlimit"
+	echo ""
+
+fi
+if [[ $HITRUN_FFT_MODE =~ "SIGPROC" ]] ; then
+
+	echo "zapfile - specify a 'seek' format file for killing frequencies in seek"
+	echo " * This only affects the 'seek' mode of FFT searching"
+	echo " * Leave blank for default file, \$HITRUN/config/zapfile"
+	echo ""
+	echo -n "Specify a zap file [(use default file)]: "
+	read q
+	if [[ -n "$q" ]] ; then
+		zapfile=$q
+	fi
+	echo "\$zapfile=$zapfile"
+	echo ""
+
+	echo "HITRUN_BEST - use new 'MJK' routine for selecting 'seek' candidates"
+	echo " * The new routine tries to reduce the number of very short period"
+	echo " * candidates, and attempts to normalise between harmonic folds"
+	echo " * however it may will likely have issues when not using BPSR data"
+	echo ""
+	echo "    0) Use old ph-best"
+	echo "    1) Use new ph-best --mjk-sigproc-fix"
+	echo -n "Choose option for ph-best [1]: "
+	read q
+	HITRUN_BEST="MJK"
+	case $q in
+		0) HITRUN_BEST="PHBEST" ;;
+		1) HITRUN_BEST="MJK";;
+	esac
+	echo "\$HITRUN_BEST=$HITRUN_BEST"
+	echo ""
+
+	echo "\$sigproc_snrlimit - overide the default SNR cutoff for seek"
+	echo " * By default this is 6"
+	sigproc_snrlimit="6.0"
+	if [[ $HITRUN_BEST == "MJK" ]] ; then
+		sigproc_snrlimit="4.0"
+		echo " * It is important to reduce this since you used MJK above."
+		echo " * A recomended value is 4.0"
+	fi
+	echo ""
+	echo "Specify a SNR cutoff [$sigproc_snrlimit]: "
+	if [[ -n "$q" ]] ; then
+		sigproc_snrlimit=$q
+	fi
+	echo "\$sigproc_snrlimit=$sigproc_snrlimit"
+	echo ""
+fi
+echo "\$HITRUN_SP_SEARCH - Choose which single pulse search mode to use"
+echo " * Use option 1 for simple, quick look, SP searching."
+echo " * Option 2 provides output for the HTRU multibeam processing pipeline"
+echo ""
+echo "   0) DISABLE single pulse search"
+echo "   1) Use dedisperse_all stand-alone version"
+echo "   2) Use dedisperse_all multibeam version"
+echo -n "Choose single pulse search mode [1]: "
+read q
+HITRUN_SP_SEARCH="ONPLOT"
+case $q in
+	0)
+	HITRUN_SP_SEARCH="NONE"
+	;;
+	1)
+	HITRUN_SP_SEARCH="ON_PLOT"
+	;;
+	2)
+	HITRUN_SP_SEARCH="ON_MULTIBEAM"
+	;;
+esac
+echo "\$HITRUN_SP_SEARCH=$HITRUN_SP_SEARCH"
+echo ""
+
+echo "\$HITRUN_KILLFILE_MODE - Which channel killing RFI removal scheme to use?"
+echo " * You can specify a list of channels to always kill at the next step"
+echo ""
+echo "   0) Use a fixed list of channels"
+echo "   1) Use dedisperse_all/seek to find channel birdies (SWIN method)"
+echo -n "Choose option for channel killing [1]: "
+read q
+HITRUN_KILLFILE_MODE="SWIN"
+case $q in
+	0) HITRUN_KILLFILE_MODE="FIXED" ;;
+	1) HITRUN_KILLFILE_MODE="SWIN" ;;
+esac
+echo "\$HITRUN_KILLFILE_MODE=$HITRUN_KILLFILE_MODE"
+echo ""
+
+echo "\$chankill - Choose a channel kill file"
+echo " * This file has a list of channels to always kill"
+echo " * By default this is \$HITRUN/config/chan_kill, if it exists"
+echo ""
+echo -n "Specify a file [(use default file)]: "
+read q
+if [[ -n "$q" ]] ; then
+	chankill=$q
+fi
+echo "\$chankill=$chankill"
+echo ""
+
+echo "\$HITRUN_TIMEZAP_MODE - Which time sample killing RFI rejection to use?"
+echo " * "
+echo ""
+echo "   0) Disable time sample zapping."
+echo "   1) Use the 'giant' program to find birdies"
+echo -n "Choose a time zap kill mode [1]: "
+read q
+HITRUN_TIMEZAP_MODE="GIANT"
+case $q in
+	0) HITRUN_TIMEZAP_MODE="NONE";;
+	1) HITRUN_TIMEZAP_MODE="GIANT" ;;
+esac
+echo "\$HITRUN_TIMEZAP_MODE=$HITRUN_TIMEZAP_MODE"
+echo ""
+
+
+HITRUN_NTHREADS=`cat /proc/cpuinfo  | grep processor | wc -l`
+echo "\$HITRUN_NTHREADS - Set the number of threads to use"
+echo " * Defines the amount of multithreading that is used"
+echo ""
+echo  -n "Specify number of threads [$HITRUN_NTHREADS]: "
+read q
+if [[ -n "$q" ]] ; then
+	HITRUN_NTHREADS=$q
+fi
+echo "\$HITRUN_NTHREADS=$HITRUN_NTHREADS"
+echo ""
+
+
+echo "\$mindm - Set the start DM search range"
+echo ""
+echo -n "Choose a start DM [0]: "
+read q
+mindm=0
+if [[ -n "$q" ]] ; then
+	mindm=$q
+fi
+echo "\$mindm=$mindm"
+echo ""
+
+echo "\$maxdm - Set the end DM search range"
+echo ""
+echo -n "Choose a ending DM [1000]: "
+read q
+maxdm=1000
+if [[ -n "$q" ]] ; then
+	maxdm=$q
+fi
+echo "\$maxdm=$maxdm"
+echo ""
+
+echo "\$max_tim - Set the maximum .tim files to make at once"
+echo " * Making this smaller causes dedispersion to be run in multiple stages"
+echo " * For long observations reducing this value will prevent running out"
+echo "   of disk space, at a small speed penalty"
+if [[ $HITRUN_SP_SEARCH =~ "ON" ]] ; then
+	echo " * WARNING: Setting this has adverse effects on the single pulse processing!"
+fi
+echo ""
+echo -n "Specify max .tim files to creat [99999]: "
+read q
+max_tim=99999
+if [[ -n "$q" ]] ; then
+	max_tim=$q
+fi
+echo "\$max_tim=$max_tim"
+echo ""
+
+echo ""
+echo "You have now configured the basic 'hitrun' settings file."
+echo -n ">> Do you want to view the advanced options? (y/n) [n]: "
+read q
+if [[ "$q" =~ "[yY]" ]] ; then
+	echo "\$start_ch - Specify the first channel with good data"
+	echo " * For BPSR specfy 145."
+	echo ""
+	echo -n "Choose a start channel [(First)]: "
+	read q
+	if [[ -n "$q" ]] ; then
+		start_ch=$q
+	fi
+	echo "\$start_ch=$start_ch"
+	echo ""
+	echo "\$end_ch - Specify the last channel with good data"
+	echo " * only channels between start_ch and end_ch will be processed"
+	echo ""
+	echo -n "Choose an end channel [(Last)]: "
+	read q
+	if [[ -n "$q" ]] ; then
+		end_ch=$q
+	fi
+	echo "\$end_ch=$end_ch"
+	echo ""
+	echo "\$ddgulp - Specify the dedisperse_all gulp size (in samples)"
+	echo " * Smaller value uses less memory, but slightly slower."
+	echo ""
+	echo -n "Specify a number of samples [500000]: "
+	read q
+	ddgulp=500000
+	if [[ -n "$q" ]] ; then
+		ddgulp=$q
+	fi
+	echo "\$ddgulp=$ddgulp"
+	echo ""
+
+	if [[ $HITRUN_SP_SEARCH =~ "ON" ]] ; then
+		echo "\$giant_settings - Specify settings for single pulse search"
+		echo " * options are appended to call to dedisperse_all -G"
+		echo ""
+		echo -n "Specify options [-mb]: "
+		read q
+		giant_settings="-mb"
+		if [[ -n "$q" ]] ; then
+			giant_settings=$q
+		fi
+		echo "\$giant_settings=$giant_settings"
+		echo ""
+	fi
+
+
+fi
+echo ""
+echo ""
+echo ""
+echo -n "Give name for output hitrun_settings file [./hitrun_settings]: "
+read q
+outfile="./hitrun_settings"
+if [[ -n "$q" ]] ; then
+	outfile=$q
+fi
+echo "Saving to '$outfile'..."
+echo ""
+echo ""
+#
+# Save file!
+#
+
+
+echo "#HITRUN SETTINGS - autogenerated on "`date` > $outfile
+echo "setenv \$HITRUN_FFT_MODE '$HITRUN_FFT_MODE'" >> $outfile
+echo "setenv \$HITRUN_BEST '$HITRUN_BEST'" >> $outfile
+echo "setenv \$HITRUN_SP_SEARCH '$HITRUN_SP_SEARCH'" >> $outfile
+echo "setenv \$HITRUN_KILLFILE_MODE '$HITRUN_KILLFILE_MODE'" >> $outfile
+echo "setenv \$HITRUN_TIMEZAP_MODE '$HITRUN_TIMEZAP_MODE'" >> $outfile
+echo "setenv \$HITRUN_NTHREADS $HITRUN_NTHREADS" >> $outfile
+
+if [[ -n "$zapfile" ]] ; then echo "set \$zapfile='$zapfile'" >> $outfile ; fi
+if [[ -n "$chankill" ]] ; then echo "set \$chankill=$chankill" >> $outfile ; fi
+if [[ -n "$sigproc_snrlimit" ]] ; then echo "set \$sigproc_snrlimit=$sigproc_snrlimit" >> $outfile ; fi
+if [[ -n "$presto_snrlimit" ]] ; then echo "set \$presto_snrlimit=$presto_snrlimit" >> $outfile ; fi
+echo "set \$mindm=$mindm" >> $outfile
+echo "set \$maxdm=$maxdm" >> $outfile
+echo "set \$max_tim=$max_tim" >> $outfile
+
+echo "DONE"
+echo ""
+echo "To use: hitrun [in.fil] $outfile"
